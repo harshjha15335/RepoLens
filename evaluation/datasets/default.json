@@ -1,0 +1,78 @@
+{
+  "repository": "calculator",
+  "description": "Evaluation dataset for the sample calculator repository",
+  "questions": [
+    {
+      "id": "q001",
+      "question": "What does this repository do?",
+      "relevant_files": ["README.md", "src/calculator.py"],
+      "relevant_symbols": ["Calculator"]
+    },
+    {
+      "id": "q002",
+      "question": "Where is the Calculator class defined?",
+      "relevant_files": ["src/calculator.py"],
+      "relevant_symbols": ["Calculator"]
+    },
+    {
+      "id": "q003",
+      "question": "How does division work? What happens with division by zero?",
+      "relevant_files": ["src/calculator.py"],
+      "relevant_symbols": ["divide"]
+    },
+    {
+      "id": "q004",
+      "question": "Explain the architecture of this project",
+      "relevant_files": ["README.md", "src/calculator.py", "src/scientific.py", "src/parser.py"],
+      "relevant_symbols": ["Calculator", "ScientificCalculator", "ExpressionParser"]
+    },
+    {
+      "id": "q005",
+      "question": "What is the inheritance hierarchy?",
+      "relevant_files": ["src/calculator.py", "src/scientific.py"],
+      "relevant_symbols": ["Calculator", "ScientificCalculator"]
+    },
+    {
+      "id": "q006",
+      "question": "How does the expression parser handle operator precedence?",
+      "relevant_files": ["src/parser.py"],
+      "relevant_symbols": ["ExpressionParser", "_parse_expression", "_parse_term", "_parse_factor"]
+    },
+    {
+      "id": "q007",
+      "question": "What methods does the ScientificCalculator add?",
+      "relevant_files": ["src/scientific.py"],
+      "relevant_symbols": ["ScientificCalculator", "sqrt", "log", "sin", "cos", "factorial"]
+    },
+    {
+      "id": "q008",
+      "question": "How is the operation history tracked?",
+      "relevant_files": ["src/calculator.py"],
+      "relevant_symbols": ["_record", "get_history", "clear_history"]
+    },
+    {
+      "id": "q009",
+      "question": "What calls the _record method?",
+      "relevant_files": ["src/calculator.py", "src/scientific.py"],
+      "relevant_symbols": ["_record", "add", "subtract", "multiply", "divide"]
+    },
+    {
+      "id": "q010",
+      "question": "How does the tokenizer work in the expression parser?",
+      "relevant_files": ["src/parser.py"],
+      "relevant_symbols": ["_tokenize"]
+    },
+    {
+      "id": "q011",
+      "question": "Where might ValueError exceptions originate?",
+      "relevant_files": ["src/calculator.py", "src/scientific.py", "src/parser.py"],
+      "relevant_symbols": ["divide", "sqrt", "log", "factorial", "_parse_factor"]
+    },
+    {
+      "id": "q012",
+      "question": "What dependencies does the scientific calculator have?",
+      "relevant_files": ["src/scientific.py"],
+      "relevant_symbols": ["ScientificCalculator"]
+    }
+  ]
+}
