@@ -74,7 +74,7 @@ export default function Header({
   const modeLabel = TUTOR_MODES.find((m) => m.id === tutorMode)?.label || "Developer";
 
   return (
-    <header style={{
+    <header className="app-header" style={{
       height: 52,
       borderBottom: '1px solid var(--border)',
       background: 'var(--surface)',

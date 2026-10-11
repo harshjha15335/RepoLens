@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Header from "./components/Header";
+import WelcomeScreen from "./components/WelcomeScreen";
 import Sidebar from "./components/Sidebar";
 import CodeViewer from "./components/CodeViewer";
 import ChatPanel from "./components/ChatPanel";
@@ -59,6 +60,23 @@ export default function Home() {
   const [evalModalOpen, setEvalModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
+  const [repositoriesLoading, setRepositoriesLoading] = useState(true);
+  const [repositoryError, setRepositoryError] = useState<string | null>(null);
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [explorerVisible, setExplorerVisible] = useState(true);
+  const [tutorVisible, setTutorVisible] = useState(true);
+  const [mobilePanel, setMobilePanel] = useState("code");
+  const [tutorWidth, setTutorWidth] = useState(340);
+  const [compactWorkspace, setCompactWorkspace] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 1050px)");
+    const update = () => setCompactWorkspace(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
   // Diagnostics
   const [chatLoading, setChatLoading] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
@@ -77,6 +95,8 @@ export default function Home() {
 
   // Initial repository load
   const loadRepositories = useCallback(async () => {
+    setRepositoriesLoading(true);
+    setRepositoryError(null);
     try {
       const repos = await api.getRepositories();
       setRepositories(repos);
@@ -85,7 +105,9 @@ export default function Home() {
         setCurrentRepo(readyRepo);
       }
     } catch (e: any) {
-      console.error("Failed to load repositories:", e);
+      setRepositoryError(e instanceof Error ? e.message : "Check your connection and try again.");
+    } finally {
+      setRepositoriesLoading(false);
     }
   }, [currentRepo]);
 
@@ -382,6 +404,9 @@ export default function Home() {
 
   // 1-Click Load Sample Calculator
   const handleLoadSample = async () => {
+    if (sampleLoading) return;
+    setSampleLoading(true);
+    setRepositoryError(null);
     try {
       const res = await fetch("/api/sample", { method: "POST" });
       if (!res.ok) {
@@ -392,7 +417,9 @@ export default function Home() {
       setRepositories((prev) => [newRepo, ...prev.filter((r) => r.id !== newRepo.id)]);
       setCurrentRepo(newRepo);
     } catch (e: any) {
-      alert(e.message || "Failed to load sample repository");
+      setRepositoryError(e instanceof Error ? e.message : "The sample could not be loaded. Try again.");
+    } finally {
+      setSampleLoading(false);
     }
   };
 
@@ -403,69 +430,15 @@ export default function Home() {
   // Repository dashboard (no repo selected or no repos)
   if (!currentRepo && repositories.length === 0) {
     return (
-      <div style={{
-        position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 1,
-      }}>
-        <div style={{
-          background: 'rgba(255,255,255,0.97)',
-          borderRadius: 'var(--radius-window)',
-          border: '1px solid rgba(20,30,45,0.08)',
-          boxShadow: 'var(--shadow-window)',
-          width: '90vw', maxWidth: '600px',
-          padding: '48px 40px',
-          textAlign: 'center',
-        }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: 14,
-            background: 'linear-gradient(135deg, #1473e6 0%, #0d66d0 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 20px',
-            boxShadow: '0 4px 12px rgba(20, 115, 230, 0.25)',
-          }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
-            </svg>
-          </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-            CodeMentor-RAG
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 32px', lineHeight: 1.5 }}>
-            Retrieval-Augmented AI Tutor for Codebase Understanding
-          </p>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 24px' }}>
-            No repositories yet. Import a repository to begin exploring it.
-          </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setUploadModalOpen(true)}
-              style={{
-                padding: '10px 24px', borderRadius: 'var(--radius-button)',
-                background: 'var(--blue)', color: 'white', border: 'none',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(20,115,230,0.25)',
-                transition: 'background 150ms',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--blue-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--blue)')}
-            >
-              Import Repository
-            </button>
-            <button
-              onClick={handleLoadSample}
-              style={{
-                padding: '10px 24px', borderRadius: 'var(--radius-button)',
-                background: 'var(--surface)', color: 'var(--text-primary)',
-                border: '1px solid var(--border)', fontSize: 13, fontWeight: 500,
-                cursor: 'pointer', transition: 'background 150ms',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--surface)')}
-            >
-              Load Calculator Demo
-            </button>
-          </div>
-        </div>
+      <>
+        <WelcomeScreen
+          loading={repositoriesLoading}
+          error={repositoryError}
+          sampleLoading={sampleLoading}
+          onRetry={loadRepositories}
+          onImport={() => setUploadModalOpen(true)}
+          onLoadSample={handleLoadSample}
+        />
         <UploadModal
           isOpen={uploadModalOpen}
           onClose={() => setUploadModalOpen(false)}
@@ -473,7 +446,7 @@ export default function Home() {
           onImportGit={handleImportGit}
           onLoadSample={handleLoadSample}
         />
-      </div>
+      </>
     );
   }
 
@@ -516,11 +489,19 @@ export default function Home() {
           onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         />
 
-        {/* Three-Column Floating Panels Layout */}
-        <div style={{ flex: 1, display: 'flex', padding: '6px 10px 10px 10px', gap: 10, overflow: 'hidden' }}>
+        <nav className="workspace-toolbar" aria-label="Workspace panels">
+          <div className="workspace-panel-controls">
+            <button className="workspace-button" aria-pressed={compactWorkspace ? mobilePanel === "explorer" : explorerVisible} onClick={() => { if (!compactWorkspace) setExplorerVisible(!explorerVisible); setMobilePanel("explorer"); }}>Explorer</button>
+            <button className="workspace-button workspace-code-toggle" aria-pressed={mobilePanel === "code"} onClick={() => setMobilePanel("code")}>Code</button>
+            <button className="workspace-button" aria-pressed={compactWorkspace ? mobilePanel === "tutor" : tutorVisible} onClick={() => { if (!compactWorkspace) setTutorVisible(!tutorVisible); setMobilePanel("tutor"); }}>AI tutor</button>
+          </div>
+          <label className="workspace-width-control">Tutor width <input type="range" min="260" max="480" step="20" value={tutorWidth} onChange={(event) => setTutorWidth(Number(event.target.value))} /></label>
+          <span className="workspace-shortcut">Search files & commands <kbd>Ctrl / ⌘ K</kbd></span>
+        </nav>
+        {repositoryError && <div className="workspace-error" role="alert">{repositoryError} <button className="workspace-button" onClick={loadRepositories}>Retry</button></div>}
+        <div className="workspace-panels" data-explorer={explorerVisible} data-tutor={tutorVisible} data-mobile-panel={mobilePanel} style={{ "--tutor-width": `${tutorWidth}px` } as React.CSSProperties}>
           {/* Left Panel - Repository Explorer */}
-          <div style={{
-            width: 250, minWidth: 210, maxWidth: 300,
+          <div className="workspace-explorer" style={{
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-panel)',
@@ -553,8 +534,8 @@ export default function Home() {
           </div>
 
           {/* Center Panel - Main Code Workspace */}
-          <div style={{
-            flex: 1, minWidth: 420,
+          <div className="workspace-editor" style={{
+            minWidth: 0,
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-panel)',
@@ -610,8 +591,7 @@ export default function Home() {
           </div>
 
           {/* Right Panel - AI Tutor */}
-          <div style={{
-            width: '25%', minWidth: 300, maxWidth: 380,
+          <div className="workspace-tutor" style={{
             background: 'var(--surface-secondary)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-panel)',

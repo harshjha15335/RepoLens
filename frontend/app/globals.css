@@ -20,7 +20,7 @@
   /* Text */
   --text-primary: #111111;
   --text-secondary: #707070;
-  --text-muted: #9a9a9a;
+  --text-muted: #6b7280;
   --text-disabled: #c0c0c0;
   
   /* Brand */
@@ -66,6 +66,77 @@
 
 * {
   box-sizing: border-box;
+}
+
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 3px;
+}
+
+.welcome-screen { min-height: 100dvh; height: 100%; overflow-y: auto; display: grid; place-items: center; padding: 32px 20px; background: radial-gradient(ellipse at 15% 0%, #e8f2ff, transparent 55%), var(--bg-desktop); }
+.welcome-card { width: 100%; max-width: 820px; padding: 48px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); box-shadow: 0 16px 60px rgba(20,30,50,.05); }
+.welcome-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 48px; color: var(--blue); }
+.welcome-eyebrow { font-size: 11px; letter-spacing: .12em; font-weight: 700; color: var(--text-secondary); }
+.welcome-card h1 { margin: 14px 0; font-size: clamp(30px, 5vw, 46px); line-height: 1.13; letter-spacing: -.04em; font-weight: 700; }
+.welcome-description { max-width: 480px; font-size: 16px; line-height: 1.7; color: var(--text-secondary); }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.welcome-primary, .welcome-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.welcome-primary { background: var(--blue); color: white; border: 1px solid var(--blue); }
+.welcome-primary:hover { background: var(--blue-hover); }
+.welcome-secondary { background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); }
+.welcome-secondary:hover { background: var(--surface-hover); }
+.welcome-secondary:disabled { cursor: wait; opacity: .7; }
+.welcome-hint { color: var(--text-muted); font-size: 12px; margin-top: 14px; }
+.welcome-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; border-top: 1px solid var(--border); margin-top: 38px; padding-top: 24px; }
+.welcome-features > div { display: flex; flex-direction: column; gap: 10px; }
+.welcome-features svg { color: var(--blue); }
+.welcome-features strong { font-size: 13px; }
+.welcome-features span { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.welcome-feedback { display: flex; align-items: center; gap: 10px; margin: 28px 0; color: var(--text-secondary); }
+.welcome-error, .workspace-error { padding: 16px; border: 1px solid #fecaca; border-radius: 8px; background: var(--red-light); color: #991b1b; overflow-wrap: anywhere; }
+.welcome-error { margin-top: 24px; }
+.welcome-error p { margin: 8px 0 14px; }
+.workspace-error { margin: 0 10px 8px; display: flex; align-items: center; gap: 12px; }
+.workspace-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; flex-shrink: 0; }
+.workspace-panel-controls { display: flex; gap: 6px; }
+.workspace-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.workspace-button:hover { background: var(--surface-hover); }
+.workspace-button[aria-pressed="true"] { color: var(--blue); background: var(--blue-light); border-color: #bed8fa; }
+.workspace-code-toggle { display: none; }
+.workspace-width-control { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-secondary); }
+.workspace-width-control input { width: 100px; accent-color: var(--blue); }
+.workspace-shortcut { color: var(--text-muted); font-size: 11px; }
+.workspace-shortcut kbd { margin-left: 8px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; }
+.workspace-panels { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr) var(--tutor-width, 340px); padding: 0 10px 10px; gap: 10px; overflow: hidden; }
+.workspace-panels > div { min-height: 0; min-width: 0; }
+.workspace-panels[data-explorer="false"] { grid-template-columns: minmax(0, 1fr) var(--tutor-width, 340px); }
+.workspace-panels[data-tutor="false"] { grid-template-columns: 240px minmax(0, 1fr); }
+.workspace-panels[data-explorer="false"][data-tutor="false"] { grid-template-columns: minmax(0, 1fr); }
+.workspace-panels[data-explorer="false"] .workspace-explorer, .workspace-panels[data-tutor="false"] .workspace-tutor { display: none !important; }
+
+@media (max-width: 1050px) {
+  .workspace-code-toggle { display: inline-flex; }
+  .workspace-width-control, .workspace-shortcut { display: none; }
+  .workspace-panels, .workspace-panels[data-explorer], .workspace-panels[data-tutor] { grid-template-columns: minmax(0, 1fr); }
+  .workspace-panels > div { display: none !important; }
+  .workspace-panels[data-mobile-panel="explorer"] .workspace-explorer,
+  .workspace-panels[data-mobile-panel="code"] .workspace-editor,
+  .workspace-panels[data-mobile-panel="tutor"] .workspace-tutor { display: flex !important; }
+  .workspace-panel-controls { flex: 1; }
+  .workspace-panel-controls button { flex: 1; min-height: 40px; }
+  .app-header { height: auto !important; min-height: 52px; flex-wrap: wrap; padding: 10px !important; gap: 8px; }
+  .app-header > div { min-width: 0; flex-wrap: wrap; }
+  .app-header > div:first-child { overflow-x: auto; max-width: 100%; }
+}
+@media (max-width: 600px) {
+  .welcome-card { padding: 28px 22px; }
+  .welcome-brand { margin-bottom: 32px; }
+  .welcome-features { grid-template-columns: 1fr; gap: 20px; }
+  .welcome-actions { flex-direction: column; }
+  .workspace-panels { padding: 0 6px 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
 html, body {
