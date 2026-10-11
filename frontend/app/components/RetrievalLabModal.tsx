@@ -61,8 +61,8 @@ export default function RetrievalLabModal({
         enableMmr,
       });
       setResults(data);
-    } catch (err: any) {
-      alert(err.message || "Retrieval search failed");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Retrieval search failed");
     } finally {
       setLoading(false);
     }
@@ -137,13 +137,12 @@ export default function RetrievalLabModal({
               <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
                 Retrieval Pipeline Lab & Inspector
               </h3>
-              <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: "2px 0 0" }}>
-                Direct benchmark & diagnostics for dense, lexical BM25, and graph-expanded retrieval
-              </p>
             </div>
           </div>
 
           <button
+            type="button"
+            aria-label="Close retrieval lab"
             onClick={onClose}
             style={{
               background: "none",

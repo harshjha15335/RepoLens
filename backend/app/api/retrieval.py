@@ -8,7 +8,9 @@ from app.core.errors import RepositoryNotFoundError
 from app.core.logging import get_logger
 from app.models.models import Repository, RepositoryStatus
 from app.schemas.schemas import (
-    RetrievalRequest, RetrievalResponse, RetrievedChunk,
+    RetrievalRequest,
+    RetrievalResponse,
+    RetrievedChunk,
 )
 from app.services.retrieval.service import RetrievalService
 

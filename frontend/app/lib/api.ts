@@ -10,37 +10,65 @@ import {
   TutorMode,
   GraphResponse,
   CallFlowItem,
+  Citation,
   InterviewQuestion,
   InterviewFeedback,
+  CodeContextAttachment,
 } from "../types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const CHAT_REQUEST_TIMEOUT_MS = 160_000;
 
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+async function request<T>(endpoint: string, options?: RequestInit, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options?.headers || {}),
-    },
-  });
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const onAbort = () => controller.abort(options?.signal?.reason);
+  if (options?.signal?.aborted) onAbort();
+  else options?.signal?.addEventListener("abort", onAbort, { once: true });
 
-  if (!response.ok) {
-    // A response stream can only be read once, even if JSON parsing fails.
-    const body = await response.text();
-    let errorDetail = body;
-    try {
-      const errJson = JSON.parse(body);
-      const detail = errJson?.error || errJson?.detail || errJson || "";
-      errorDetail = typeof detail === "string" ? detail : JSON.stringify(detail);
-    } catch {
-      // Preserve non-JSON errors returned by the backend or its proxy.
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        ...(options?.headers || {}),
+      },
+    });
+
+    if (!response.ok) {
+      // A response stream can only be read once, even if JSON parsing fails.
+      const body = await response.text();
+      let errorDetail = body;
+      try {
+        const errJson = JSON.parse(body);
+        const detail = errJson?.error || errJson?.detail || errJson || "";
+        errorDetail = typeof detail === "string" ? detail : JSON.stringify(detail);
+      } catch {
+        // Preserve non-JSON errors returned by the backend or its proxy.
+      }
+      if (errorDetail.trim().toLowerCase() === "internal server error") {
+        errorDetail = `The server could not complete this request (HTTP ${response.status}). Check that the backend is running and inspect its logs.`;
+      }
+      throw new Error(errorDetail || `HTTP error ${response.status}`);
     }
-    throw new Error(errorDetail || `HTTP error ${response.status}`);
-  }
 
-  return response.json();
+    return await response.json();
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(`Request timed out after ${timeoutMs / 1000} seconds. The client stopped waiting; server work may continue.`, { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    options?.signal?.removeEventListener("abort", onAbort);
+  }
 }
 
 export const api = {
@@ -207,19 +235,20 @@ export const api = {
     question: string;
     tutorMode: TutorMode;
     sessionId?: string;
+    codeContext?: CodeContextAttachment;
   }): Promise<{
     session_id: string;
     message_id: string;
     answer: string;
-    citations: any[];
-    retrieval_metadata: any;
+    citations: Citation[];
+    retrieval_metadata: NonNullable<ChatMessage["retrieval_metadata"]>;
   }> {
     return request<{
       session_id: string;
       message_id: string;
       answer: string;
-      citations: any[];
-      retrieval_metadata: any;
+      citations: Citation[];
+      retrieval_metadata: NonNullable<ChatMessage["retrieval_metadata"]>;
     }>("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -228,8 +257,9 @@ export const api = {
         question: params.question,
         tutor_mode: params.tutorMode,
         session_id: params.sessionId,
+        code_context: params.codeContext,
       }),
-    });
+    }, CHAT_REQUEST_TIMEOUT_MS);
   },
 
   // Direct Retrieval Search

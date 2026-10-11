@@ -37,7 +37,7 @@ export default function ActivityRail({
   const navItems: {
     id: ActiveActivityView;
     label: string;
-    icon: any;
+    icon: typeof Folder;
     shortcut?: string;
   }[] = [
     { id: "files", label: "Explorer (Files)", icon: Folder, shortcut: "Ctrl+Shift+E" },

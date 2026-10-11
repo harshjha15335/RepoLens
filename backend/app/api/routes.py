@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter
 
+from app.api.chat import router as chat_router
+from app.api.evaluation import router as evaluation_router
 from app.api.health import router as health_router
 from app.api.repositories import router as repositories_router
-from app.api.chat import router as chat_router
 from app.api.retrieval import router as retrieval_router
-from app.api.evaluation import router as evaluation_router
 
 router = APIRouter()
 

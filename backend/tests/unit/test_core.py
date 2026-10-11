@@ -1,12 +1,9 @@
 """Unit tests for core services: parsing, chunking, indexing, retrieval."""
 
-import hashlib
-import math
 import os
 import tempfile
 import zipfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -17,9 +14,9 @@ class TestPathValidation:
 
     def test_path_traversal_detection(self):
         """Zip Slip: ../../../etc/passwd should be rejected."""
-        from app.services.ingestion.service import IngestionService
-        from app.core.errors import ArchiveSecurityError
         from app.core.config import get_settings
+        from app.core.errors import ArchiveSecurityError
+        from app.services.ingestion.service import IngestionService
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a malicious ZIP with path traversal
@@ -36,9 +33,9 @@ class TestPathValidation:
 
     def test_absolute_path_detection(self):
         """Absolute paths in ZIP should be rejected."""
-        from app.services.ingestion.service import IngestionService
-        from app.core.errors import ArchiveSecurityError
         from app.core.config import get_settings
+        from app.core.errors import ArchiveSecurityError
+        from app.services.ingestion.service import IngestionService
 
         with tempfile.TemporaryDirectory() as tmpdir:
             zip_path = os.path.join(tmpdir, "malicious.zip")
@@ -54,8 +51,8 @@ class TestPathValidation:
 
     def test_safe_zip_extraction(self):
         """A valid ZIP should extract safely."""
-        from app.services.ingestion.service import IngestionService
         from app.core.config import get_settings
+        from app.services.ingestion.service import IngestionService
 
         with tempfile.TemporaryDirectory() as tmpdir:
             zip_path = os.path.join(tmpdir, "safe.zip")
@@ -126,8 +123,8 @@ class TestFileFiltering:
         assert ".java" in SUPPORTED_EXTENSIONS
 
     def test_discover_files(self):
-        from app.services.ingestion.service import IngestionService
         from app.core.config import get_settings
+        from app.services.ingestion.service import IngestionService
 
         with tempfile.TemporaryDirectory() as tmpdir:
             source_dir = Path(tmpdir)
@@ -541,25 +538,28 @@ class TestCitationExtraction:
 class TestConfiguration:
     """Tests for configuration loading."""
 
-    def test_default_settings(self):
+    @pytest.fixture
+    def default_settings(self, monkeypatch):
         from app.core.config import Settings
 
-        settings = Settings()
+        for field in Settings.model_fields.values():
+            if field.alias:
+                monkeypatch.delenv(field.alias, raising=False)
+        return Settings(_env_file=None)
+
+    def test_default_settings(self, default_settings):
+        settings = default_settings
         assert settings.app_env == "development"
         assert settings.max_upload_mb == 500
         assert settings.dense_top_k == 20
         assert settings.bm25_top_k == 20
         assert settings.rrf_k == 60
 
-    def test_max_upload_bytes(self):
-        from app.core.config import Settings
-
-        settings = Settings()
+    def test_max_upload_bytes(self, default_settings):
+        settings = default_settings
         assert settings.max_upload_bytes == 500 * 1024 * 1024
 
-    def test_embedding_config(self):
-        from app.core.config import Settings
-
-        settings = Settings()
+    def test_embedding_config(self, default_settings):
+        settings = default_settings
         assert settings.embedding_provider == "sentence-transformers"
         assert settings.embedding_model == "all-MiniLM-L6-v2"

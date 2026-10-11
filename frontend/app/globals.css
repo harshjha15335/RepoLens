@@ -97,33 +97,33 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .welcome-error { margin-top: 24px; }
 .welcome-error p { margin: 8px 0 14px; }
 .workspace-error { margin: 0 10px 8px; display: flex; align-items: center; gap: 12px; }
-.workspace-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; flex-shrink: 0; }
-.workspace-panel-controls { display: flex; gap: 6px; }
 .workspace-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
 .workspace-button:hover { background: var(--surface-hover); }
-.workspace-button[aria-pressed="true"] { color: var(--blue); background: var(--blue-light); border-color: #bed8fa; }
-.workspace-code-toggle { display: none; }
-.workspace-width-control { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-secondary); }
-.workspace-width-control input { width: 100px; accent-color: var(--blue); }
-.workspace-shortcut { color: var(--text-muted); font-size: 11px; }
-.workspace-shortcut kbd { margin-left: 8px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; }
-.workspace-panels { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr) var(--tutor-width, 340px); padding: 0 10px 10px; gap: 10px; overflow: hidden; }
+.workspace-mobile-nav { display: none; }
+.workspace-panels { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px; padding: 8px 10px 10px; gap: 10px; overflow: hidden; }
 .workspace-panels > div { min-height: 0; min-width: 0; }
-.workspace-panels[data-explorer="false"] { grid-template-columns: minmax(0, 1fr) var(--tutor-width, 340px); }
-.workspace-panels[data-tutor="false"] { grid-template-columns: 240px minmax(0, 1fr); }
-.workspace-panels[data-explorer="false"][data-tutor="false"] { grid-template-columns: minmax(0, 1fr); }
-.workspace-panels[data-explorer="false"] .workspace-explorer, .workspace-panels[data-tutor="false"] .workspace-tutor { display: none !important; }
+.graph-view { container-type: inline-size; }
+.graph-filters { flex: 1 1 100%; }
+.graph-search { flex: 1 1 170px; min-width: 140px; }
+.graph-search input { width: 100%; box-sizing: border-box; }
+.graph-filters select { max-width: 100%; }
+.graph-inspector { width: 280px; min-width: 0; }
+.graph-back-button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--blue); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.graph-back-button:hover { background: var(--blue-light); }
+@container (max-width: 700px) {
+  .graph-body { flex-direction: column; }
+  .graph-inspector { width: auto; height: 220px; border-left: 0 !important; border-top: 1px solid var(--border); }
+}
 
 @media (max-width: 1050px) {
-  .workspace-code-toggle { display: inline-flex; }
-  .workspace-width-control, .workspace-shortcut { display: none; }
-  .workspace-panels, .workspace-panels[data-explorer], .workspace-panels[data-tutor] { grid-template-columns: minmax(0, 1fr); }
+  .workspace-mobile-nav { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 10px 0; flex-shrink: 0; }
+  .workspace-mobile-nav button { display: flex; align-items: center; justify-content: center; flex: 1; max-width: 120px; min-height: 38px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
+  .workspace-mobile-nav button[aria-pressed="true"] { color: var(--blue); background: var(--blue-light); border-color: #bed8fa; }
+  .workspace-panels { grid-template-columns: minmax(0, 1fr); }
   .workspace-panels > div { display: none !important; }
   .workspace-panels[data-mobile-panel="explorer"] .workspace-explorer,
   .workspace-panels[data-mobile-panel="code"] .workspace-editor,
   .workspace-panels[data-mobile-panel="tutor"] .workspace-tutor { display: flex !important; }
-  .workspace-panel-controls { flex: 1; }
-  .workspace-panel-controls button { flex: 1; min-height: 40px; }
   .app-header { height: auto !important; min-height: 52px; flex-wrap: wrap; padding: 10px !important; gap: 8px; }
   .app-header > div { min-width: 0; flex-wrap: wrap; }
   .app-header > div:first-child { overflow-x: auto; max-width: 100%; }

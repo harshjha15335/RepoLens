@@ -7,27 +7,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY pyproject.toml .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir \
-    fastapi uvicorn pydantic pydantic-settings \
-    "sqlalchemy[asyncio]" aiosqlite python-multipart \
-    httpx numpy faiss-cpu sentence-transformers \
-    "tree-sitter>=0.22.0" tree-sitter-python tree-sitter-javascript \
-    tree-sitter-typescript tree-sitter-java tree-sitter-c \
-    tree-sitter-cpp tree-sitter-go
+# Install the CPU-only PyTorch wheel before the project dependencies so
+# sentence-transformers does not pull the default CUDA-enabled distribution.
+COPY pyproject.toml README.md ./
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
 
 # Copy application
 COPY app/ app/
+
+# Install dependencies declared by the project without an editable install.
+RUN pip install --no-cache-dir .
 
 # Create data directory
 RUN mkdir -p /app/data
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/api/health')" || exit 1
+    CMD python -c "import httpx; httpx.get('http://localhost:8000/api/health').raise_for_status()" || exit 1
 
 EXPOSE 8000
 

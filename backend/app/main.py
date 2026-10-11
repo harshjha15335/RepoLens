@@ -1,17 +1,16 @@
 """FastAPI application entry point for CodeMentor-RAG."""
 
-import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.core.config import get_settings
-from app.core.database import init_db, close_db
-from app.core.errors import CodeMentorError
-from app.core.logging import setup_logging, get_logger, request_id_var, generate_request_id
 from app.api.routes import router as api_router
+from app.core.config import get_settings
+from app.core.database import close_db, init_db
+from app.core.errors import CodeMentorError
+from app.core.logging import generate_request_id, get_logger, request_id_var, setup_logging
 
 logger = get_logger(__name__)
 

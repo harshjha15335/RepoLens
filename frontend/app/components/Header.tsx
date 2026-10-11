@@ -22,8 +22,6 @@ interface HeaderProps {
   currentRepo: Repository | null;
   onSelectRepo: (repo: Repository) => void;
   onOpenUpload: () => void;
-  onOpenLab: () => void;
-  onOpenEvaluation: () => void;
   onLoadSample: () => void;
   onRefresh: () => void;
   onDeleteRepo: (repoId: string) => void;
@@ -31,10 +29,6 @@ interface HeaderProps {
   isPolling: boolean;
   tutorMode: TutorMode;
   onTutorModeChange: (mode: TutorMode) => void;
-  centerView: string;
-  onCenterViewChange: (view: "code" | "graph" | "retrieval" | "evaluation") => void;
-  onOpenSettings: () => void;
-  onOpenCommandPalette: () => void;
 }
 
 const TUTOR_MODES: { id: TutorMode; label: string }[] = [
@@ -49,8 +43,6 @@ export default function Header({
   currentRepo,
   onSelectRepo,
   onOpenUpload,
-  onOpenLab,
-  onOpenEvaluation,
   onLoadSample,
   onRefresh,
   onDeleteRepo,
@@ -58,10 +50,6 @@ export default function Header({
   isPolling,
   tutorMode,
   onTutorModeChange,
-  centerView,
-  onCenterViewChange,
-  onOpenSettings,
-  onOpenCommandPalette,
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -69,7 +57,7 @@ export default function Header({
   const repoStatus = currentRepo?.status?.toLowerCase();
   const isReady = repoStatus === "ready";
   const isFailed = repoStatus === "failed";
-  const isIndexing = !isReady && !isFailed && currentRepo != null;
+  const isIndexing = currentRepo != null && !["ready", "failed", "pending"].includes(repoStatus || "");
 
   const modeLabel = TUTOR_MODES.find((m) => m.id === tutorMode)?.label || "Developer";
 
@@ -200,10 +188,9 @@ export default function Header({
                               style={{
                                 background: 'none', border: 'none', cursor: 'pointer',
                                 color: 'var(--text-muted)', padding: 2, display: 'flex',
-                                opacity: 0, transition: 'opacity 120ms',
+                                opacity: 1, transition: 'color 120ms',
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; }}
+                              aria-label={`Delete ${repo.name}`}
                               title="Delete"
                             >
                               <Trash2 style={{ width: 12, height: 12 }} />
@@ -277,17 +264,17 @@ export default function Header({
 
         {/* Index/Reindex button (maps to "Save and Publish" in reference) */}
         <button
-          onClick={isReady ? onReindex : undefined}
-          disabled={!currentRepo}
+          onClick={onReindex}
+          disabled={!currentRepo || isIndexing}
           style={{
             padding: '6px 16px', borderRadius: 'var(--radius-button)',
             background: isIndexing ? 'var(--blue)' : 'var(--blue)',
             border: 'none', fontSize: 12, fontWeight: 600,
-            color: 'white', cursor: currentRepo ? 'pointer' : 'not-allowed',
+            color: 'white', cursor: currentRepo && !isIndexing ? 'pointer' : 'not-allowed',
             transition: 'all 120ms',
             display: 'flex', alignItems: 'center', gap: 5,
             boxShadow: '0 1px 4px rgba(20,115,230,0.25)',
-            opacity: currentRepo ? 1 : 0.5,
+            opacity: currentRepo && !isIndexing ? 1 : 0.7,
           }}
           onMouseEnter={(e) => { if (currentRepo) e.currentTarget.style.background = 'var(--blue-hover)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--blue)'; }}
@@ -300,10 +287,11 @@ export default function Header({
           ) : isReady ? (
             <>
               Reindex
-              <ChevronDown style={{ width: 12, height: 12 }} />
             </>
+          ) : isFailed ? (
+            <>Retry indexing</>
           ) : (
-            <>Index Repository</>
+            <>Start indexing</>
           )}
         </button>
 

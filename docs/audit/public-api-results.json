@@ -1,0 +1,178 @@
+{
+  "checked_at_utc": "2026-10-11T19:35:39.884201+00:00",
+  "base_url": "https://computers-welfare-anytime-stem.trycloudflare.com/api",
+  "repository_id": "a044a248-81e8-42c0-bacf-18ea31f1bee2",
+  "read_only": true,
+  "checks": [
+    {
+      "name": "health",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "database": "connected",
+        "backend": "running"
+      }
+    },
+    {
+      "name": "repository ready",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "files": 4,
+        "chunks": 42,
+        "symbols": 37,
+        "graph_nodes": 30,
+        "graph_edges": 39
+      }
+    },
+    {
+      "name": "indexed files",
+      "status_code": 200,
+      "passed": true,
+      "detail": [
+        "README.md",
+        "src\\calculator.py",
+        "src\\parser.py",
+        "src\\scientific.py"
+      ]
+    },
+    {
+      "name": "source content",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "path": "src\\calculator.py",
+        "lines": 60
+      }
+    },
+    {
+      "name": "graph",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "total_nodes": 30,
+        "total_edges": 39,
+        "node_types": {
+          "file": 4,
+          "class": 3,
+          "method": 22,
+          "function": 1
+        },
+        "edge_types": {
+          "CONTAINS": 26,
+          "CALLS": 10,
+          "IMPORTS": 2,
+          "INHERITS": 1
+        }
+      }
+    },
+    {
+      "name": "call flows",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "total": 11,
+        "relationships": [
+          "CALLS",
+          "INHERITS"
+        ]
+      }
+    },
+    {
+      "name": "retrieval bm25",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "count": 5,
+        "intent": "GENERAL_CODE_QUESTION",
+        "first": "divide",
+        "latency_ms": 9.28
+      }
+    },
+    {
+      "name": "retrieval dense",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "count": 5,
+        "intent": "GENERAL_CODE_QUESTION",
+        "first": "__init__",
+        "latency_ms": 22.07
+      }
+    },
+    {
+      "name": "retrieval hybrid_rrf",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "count": 5,
+        "intent": "GENERAL_CODE_QUESTION",
+        "first": "__init__",
+        "latency_ms": 13.8
+      }
+    },
+    {
+      "name": "retrieval graph_expansion",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "count": 5,
+        "intent": "GENERAL_CODE_QUESTION",
+        "first": "__init__",
+        "latency_ms": 19.82
+      }
+    },
+    {
+      "name": "interview generate",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "total": 3,
+        "topics": [
+          "Architecture & Object Model",
+          "Inheritance & Extensibility",
+          "Algorithms & Parsing"
+        ]
+      }
+    },
+    {
+      "name": "interview feedback",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "score": 35,
+        "citations": [
+          {
+            "file_path": "src\\calculator.py",
+            "start_line": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "existing evaluation",
+      "status_code": 200,
+      "passed": true,
+      "detail": {
+        "id": "f22efa66-af80-4055-8fe4-61cfb07c879b",
+        "status": "completed",
+        "strategies": [
+          "bm25",
+          "dense",
+          "hybrid_rrf",
+          "graph_expansion"
+        ]
+      }
+    },
+    {
+      "name": "path traversal rejected",
+      "status_code": 400,
+      "passed": true,
+      "detail": {
+        "error": "Invalid file path"
+      }
+    }
+  ],
+  "passed": 14,
+  "total": 14
+}

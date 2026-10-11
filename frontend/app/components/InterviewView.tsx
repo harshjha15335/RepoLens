@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
+  ArrowLeft,
   RefreshCw,
   FileCode,
   ExternalLink,
@@ -22,12 +23,14 @@ interface InterviewViewProps {
   repositoryId: string;
   repoName?: string;
   onInspectCitation: (citation: Citation) => void;
+  onBackToCode: () => void;
 }
 
 export default function InterviewView({
   repositoryId,
   repoName,
   onInspectCitation,
+  onBackToCode,
 }: InterviewViewProps) {
   // State machine: "setup" | "interviewing" | "feedback" | "completed"
   const [stage, setStage] = useState<"setup" | "interviewing" | "feedback" | "completed">("setup");
@@ -63,8 +66,8 @@ export default function InterviewView({
       } else {
         alert("Could not generate interview questions for this repository. Ensure indexing is complete.");
       }
-    } catch (e: any) {
-      alert(e.message || "Failed to start interview");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to start interview");
     } finally {
       setEvaluating(false);
     }
@@ -90,8 +93,8 @@ export default function InterviewView({
       setFeedback(res);
       setScores((prev) => [...prev, res.score]);
       setStage("feedback");
-    } catch (e: any) {
-      alert(e.message || "Failed to evaluate answer");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to evaluate answer");
     } finally {
       setEvaluating(false);
     }
@@ -115,6 +118,9 @@ export default function InterviewView({
   return (
     <div className="flex-1 flex flex-col h-full bg-[#030712] overflow-y-auto p-6 select-text">
       <div className="max-w-3xl mx-auto w-full space-y-6">
+        <button type="button" onClick={onBackToCode} className="inline-flex items-center gap-2 text-xs text-slate-300 hover:text-white">
+          <ArrowLeft className="w-4 h-4" /> Back to code
+        </button>
         {/* Setup Stage */}
         {stage === "setup" && (
           <div className="rounded-2xl bg-slate-900 border border-slate-800 shadow-xl overflow-hidden p-6 space-y-6">
@@ -124,9 +130,6 @@ export default function InterviewView({
               </div>
               <div>
                 <h2 className="text-base font-bold text-white">Repository Technical Interview</h2>
-                <p className="text-xs text-slate-400">
-                  Test your understanding of {repoName || "this codebase"} with grounded questions and line-referenced feedback.
-                </p>
               </div>
             </div>
 
@@ -137,15 +140,15 @@ export default function InterviewView({
                   Select Difficulty:
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {[
+                  {([
                     { id: "beginner", label: "Beginner", desc: "Core concepts & symbols" },
                     { id: "intermediate", label: "Intermediate", desc: "Control flow & patterns" },
                     { id: "advanced", label: "Advanced", desc: "Architecture & failure modes" },
-                  ].map((d) => (
+                  ] as const).map((d) => (
                     <button
                       key={d.id}
                       type="button"
-                      onClick={() => setDifficulty(d.id as any)}
+                      onClick={() => setDifficulty(d.id)}
                       className={`p-3 rounded-xl border text-left transition-all ${
                         difficulty === d.id
                           ? "bg-emerald-950/40 border-emerald-500/60 shadow-md shadow-emerald-500/10"
@@ -295,7 +298,7 @@ export default function InterviewView({
                   ) : (
                     <Send className="w-3.5 h-3.5" />
                   )}
-                  <span>{evaluating ? "Evaluating Grounding..." : "Submit Answer"}</span>
+                  <span>{evaluating ? "Checking Source Overlap..." : "Submit Answer"}</span>
                 </button>
               </div>
             </form>
@@ -317,7 +320,7 @@ export default function InterviewView({
 
               {/* Score pill */}
               <div className="flex items-center gap-2 font-mono">
-                <span className="text-xs text-slate-400">Grounded Score:</span>
+                <span className="text-xs text-slate-400">Source overlap score:</span>
                 <span
                   className={`text-sm font-bold ${
                     feedback.score >= 80
@@ -344,7 +347,7 @@ export default function InterviewView({
               <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-500/20">
                 <div className="flex items-center gap-1.5 text-emerald-400 font-bold mb-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>What was correct:</span>
+                  <span>Matched source terms:</span>
                 </div>
                 <p className="text-slate-300 leading-relaxed pl-5">
                   {feedback.what_was_correct}
@@ -355,7 +358,7 @@ export default function InterviewView({
               <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/20">
                 <div className="flex items-center gap-1.5 text-amber-400 font-bold mb-1">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>What was missing or could be improved:</span>
+                  <span>Missing source terms:</span>
                 </div>
                 <p className="text-slate-300 leading-relaxed pl-5">
                   {feedback.what_was_missing}
@@ -365,10 +368,10 @@ export default function InterviewView({
               {/* Grounded Code Explanation */}
               <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
                 <span className="text-slate-400 font-semibold block mb-1">
-                  Repository Architecture Explanation:
+                  Relevant source excerpts:
                 </span>
                 <p className="text-slate-300 leading-relaxed">
-                  {feedback.grounded_explanation}
+                  {feedback.grounded_explanation.replace(/^Relevant source excerpts:\s*/i, "")}
                 </p>
               </div>
 
@@ -422,13 +425,10 @@ export default function InterviewView({
 
             <div>
               <h2 className="text-lg font-bold text-white">Interview Complete!</h2>
-              <p className="text-xs text-slate-400 mt-1">
-                You evaluated {questions.length} technical architecture questions grounded in {repoName || "this repository"}.
-              </p>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 max-w-sm mx-auto font-mono">
-              <span className="text-xs text-slate-400 block mb-1">Average Grounding Score</span>
+              <span className="text-xs text-slate-400 block mb-1">Average source overlap</span>
               <span className="text-3xl font-extrabold text-emerald-400">{averageScore}%</span>
             </div>
 

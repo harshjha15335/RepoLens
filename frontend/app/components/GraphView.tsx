@@ -11,6 +11,7 @@ import {
   Maximize2,
   FileCode,
   ArrowRight,
+  ArrowLeft,
   Boxes,
   Cpu,
   GitFork,
@@ -24,13 +25,15 @@ import { api } from "../lib/api";
 interface GraphViewProps {
   repositoryId: string;
   onInspectNode: (citation: Citation) => void;
+  onBackToCode: () => void;
 }
 
-export default function GraphView({ repositoryId, onInspectNode }: GraphViewProps) {
+export default function GraphView({ repositoryId, onInspectNode, onBackToCode }: GraphViewProps) {
   const [tab, setTab] = useState<"graph" | "call_flow">("graph");
   const [graphData, setGraphData] = useState<GraphResponse | null>(null);
   const [callFlows, setCallFlows] = useState<CallFlowItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string>("all");
   const [edgeTypeFilter, setEdgeTypeFilter] = useState<string>("all");
@@ -39,25 +42,29 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
 
   // Load graph and call flows
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       setLoading(true);
+      setError(null);
       try {
         const [graph, flows] = await Promise.all([
           api.getGraph(repositoryId, nodeTypeFilter, edgeTypeFilter, 250),
           api.getCallFlows(repositoryId),
         ]);
+        if (cancelled) return;
         setGraphData(graph);
         setCallFlows(flows.flows || []);
-        if (graph.nodes.length > 0 && !selectedNode) {
-          setSelectedNode(graph.nodes[0]);
-        }
+        setSelectedNode((current) => graph.nodes.find((node) => node.id === current?.id) || graph.nodes[0] || null);
       } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Unable to load graph");
         console.error("Failed to load graph data:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     load();
+    return () => { cancelled = true; };
   }, [repositoryId, nodeTypeFilter, edgeTypeFilter]);
 
   // Filtered nodes
@@ -106,6 +113,7 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
 
   return (
     <div
+      className="graph-view"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -118,18 +126,23 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
     >
       {/* ─── Top Toolbar ─── */}
       <div
+        className="graph-toolbar"
         style={{
-          height: 48,
           borderBottom: "1px solid var(--border)",
           background: "var(--surface)",
-          padding: "0 16px",
+          padding: "8px 12px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
           flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, minWidth: 0 }}>
+          <button type="button" onClick={onBackToCode} className="graph-back-button">
+            <ArrowLeft size={14} /> Back to code
+          </button>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Network style={{ width: 16, height: 16, color: "var(--blue)" }} />
             <h2 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
@@ -185,9 +198,9 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
         </div>
 
         {tab === "graph" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="graph-filters" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, minWidth: 0 }}>
             {/* Search */}
-            <div style={{ position: "relative" }}>
+            <div className="graph-search" style={{ position: "relative" }}>
               <Search
                 style={{
                   width: 13,
@@ -205,7 +218,6 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
-                  width: 170,
                   height: 30,
                   background: "var(--surface)",
                   border: "1px solid var(--border)",
@@ -313,8 +325,10 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
       </div>
 
       {/* ─── Main View Area ─── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {loading ? (
+      <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
+        {error ? (
+          <div role="alert" style={{ padding: 24, color: "var(--text-secondary)" }}>{error}</div>
+        ) : loading ? (
           <div
             style={{
               flex: 1,
@@ -330,12 +344,14 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
             <span>Rendering code knowledge graph...</span>
           </div>
         ) : tab === "graph" ? (
-          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          <div className="graph-body" style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", overflow: "hidden" }}>
             {/* Visual Graph Canvas - Spacious with Auto-Fit Grid (guaranteed min-width 240px per node) */}
             <div
-              className="dotted-grid"
+              className="graph-canvas dotted-grid"
               style={{
                 flex: 1,
+                minWidth: 0,
+                minHeight: 0,
                 overflow: "auto",
                 padding: 20,
                 background: "#fafafa",
@@ -473,8 +489,8 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
 
             {/* Right Side: Selected Node Inspector Panel */}
             <div
+              className="graph-inspector"
               style={{
-                width: 290,
                 borderLeft: "1px solid var(--border)",
                 background: "var(--surface)",
                 padding: 16,
@@ -500,7 +516,7 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
                     >
                       Selected Node Details
                     </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, minWidth: 0 }}>
                       <h3
                         style={{
                           fontFamily: "var(--font-mono)",
@@ -508,6 +524,7 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
                           fontWeight: 700,
                           color: "var(--text-primary)",
                           margin: 0,
+                          minWidth: 0,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
@@ -566,7 +583,7 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
                         <span style={{ color: "var(--text-muted)", fontSize: 10, display: "block" }}>
                           File Coordinates
                         </span>
-                        <span style={{ color: "var(--text-primary)", fontSize: 11 }}>
+                        <span style={{ color: "var(--text-primary)", fontSize: 11, overflowWrap: "anywhere" }}>
                           {selectedNode.file_path}:L{selectedNode.start_line}-{selectedNode.end_line}
                         </span>
                       </div>
@@ -581,13 +598,17 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {graphData?.edges
                         .filter((e) => e.source === selectedNode.id || e.target === selectedNode.id)
-                        .slice(0, 8)
                         .map((edge, idx) => {
                           const isSource = edge.source === selectedNode.id;
+                          const connectedNode = graphData?.nodes.find((node) => node.id === (isSource ? edge.target : edge.source));
                           const edgeBadge = getEdgeBadge(edge.type);
                           return (
-                            <div
-                              key={idx}
+                            <button
+                              type="button"
+                              key={edge.id || idx}
+                              disabled={!connectedNode}
+                              onClick={() => connectedNode && setSelectedNode(connectedNode)}
+                              title={connectedNode?.qualified_name}
                               style={{
                                 padding: "6px 8px",
                                 borderRadius: 8,
@@ -597,6 +618,9 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
                                 alignItems: "center",
                                 justifyContent: "space-between",
                                 fontSize: 11,
+                                gap: 8,
+                                textAlign: "left",
+                                cursor: connectedNode ? "pointer" : "default",
                               }}
                             >
                               <span
@@ -614,10 +638,10 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
                               >
                                 {edge.type}
                               </span>
-                              <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontSize: 10 }}>
-                                {isSource ? "Outgoing →" : "← Incoming"}
+                              <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-secondary)", fontSize: 10, overflowWrap: "anywhere" }}>
+                                {isSource ? "→ " : "← "}{connectedNode?.name || "Unavailable node"}
                               </span>
-                            </div>
+                            </button>
                           );
                         })}
                     </div>
@@ -670,21 +694,9 @@ export default function GraphView({ repositoryId, onInspectNode }: GraphViewProp
           /* Call Flows & Chains Tab */
           <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
             <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
-              <div
-                style={{
-                  padding: 12,
-                  borderRadius: 10,
-                  background: "#f8fafc",
-                  border: "1px solid var(--border)",
-                  fontSize: 12,
-                  color: "var(--text-secondary)",
-                }}
-              >
-                <span style={{ fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: 2 }}>
-                  Static Call Flow & Hierarchy Traces
-                </span>
-                Extracted static relationships identifying caller functions, invoked callees, and class inheritance chains across repository source files.
-              </div>
+              <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
+                Static Call Flow & Hierarchy Traces
+              </h3>
 
               {callFlows.length === 0 ? (
                 <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>

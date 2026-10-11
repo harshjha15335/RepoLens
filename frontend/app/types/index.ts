@@ -101,7 +101,7 @@ export interface ChatMessage {
     total_retrieved?: number;
     latency_ms?: number;
     retrieved_chunks?: RetrievedChunk[];
-    [key: string]: any;
+    [key: string]: unknown;
   };
   created_at: string;
 }
@@ -131,6 +131,7 @@ export type ActiveActivityView =
   | "settings";
 
 export interface CodeContextAttachment {
+  action?: "explain" | "debug" | "trace";
   file_path: string;
   start_line: number;
   end_line: number;
@@ -146,7 +147,7 @@ export interface GraphNodeData {
   file_path?: string;
   start_line?: number;
   end_line?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface GraphEdgeData {
@@ -154,7 +155,7 @@ export interface GraphEdgeData {
   source: string;
   target: string;
   type: "CONTAINS" | "IMPORTS" | "CALLS" | "INHERITS" | string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface GraphResponse {
@@ -213,12 +214,11 @@ export interface EvaluationMetricResult {
   mrr: number;
   avg_latency_ms: number;
   results: Array<{
-    id: string;
+    question_id: string;
     question: string;
-    relevant_files: string[];
     retrieved_files: string[];
-    hit_at_5: boolean;
-    hit_at_10: boolean;
+    recall_at_5: number;
+    recall_at_10: number;
     reciprocal_rank: number;
     latency_ms: number;
   }>;
@@ -231,4 +231,5 @@ export interface EvaluationRun {
   metrics: EvaluationMetricResult[];
   created_at: string;
   completed_at?: string | null;
+  error_message?: string | null;
 }

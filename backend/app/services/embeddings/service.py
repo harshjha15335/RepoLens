@@ -2,7 +2,6 @@
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any
 
 import numpy as np
 
@@ -41,7 +40,7 @@ class EmbeddingProvider(ABC):
 
 class DeterministicLocalEmbeddingProvider(EmbeddingProvider):
     """Offline, deterministic dense embedding provider (dim=384 default).
-    
+
     Generates consistent, normalized dense vectors using code tokenization,
     identifier awareness, character n-grams, and signed hashing projections.
     Guarantees indexing succeeds without network access or when HF CDN is denied.

@@ -1,7 +1,7 @@
 """Code graph service for building and querying repository relationships."""
 
 import re
-from typing import Any
+from collections import defaultdict
 
 from app.core.logging import get_logger
 
@@ -20,6 +20,7 @@ class GraphService:
         nodes = []
         edges = []
         node_map = {}  # qualified_name -> node_id
+        symbols_by_name = defaultdict(list)
 
         # Phase 1: Create nodes
         for pf in parsed_files:
@@ -64,7 +65,12 @@ class GraphService:
                         "metadata": {"language": language, "parent": parent},
                     })
                     node_map[qualified] = node_id
-                    node_map[sym_name] = node_id  # Also map simple name
+                    symbols_by_name[sym_name].append({
+                        "id": node_id,
+                        "file_path": file_path,
+                        "parent": parent,
+                        "type": sym_type,
+                    })
 
                     # CONTAINS edge: file -> symbol or class -> method
                     if parent and f"{file_path}:{parent}" in node_map:
@@ -81,10 +87,28 @@ class GraphService:
                         })
 
         # Phase 2: Extract relationships
+        def resolve_symbol(name: str, file_path: str, parent: str | None = None,
+                           receiver: str | None = None, type_: str | None = None) -> str | None:
+            candidates = [
+                node for node in symbols_by_name.get(name, [])
+                if type_ is None or node["type"] == type_
+            ]
+            if receiver in ("self", "this"):
+                owned = [n for n in candidates if n["file_path"] == file_path and n["parent"] == parent]
+                return owned[0]["id"] if len(owned) == 1 else None
+            if receiver:
+                return None  # The receiver's type is not known statically.
+            same_parent = [n for n in candidates if n["file_path"] == file_path and n["parent"] == parent]
+            if len(same_parent) == 1:
+                return same_parent[0]["id"]
+            same_file = [n for n in candidates if n["file_path"] == file_path and n["parent"] is None]
+            if len(same_file) == 1:
+                return same_file[0]["id"]
+            return candidates[0]["id"] if len(candidates) == 1 else None
+
         for pf in parsed_files:
             file_path = pf.get("file_path", "")
             language = pf.get("language", "")
-            content = pf.get("content", "")
             file_node_id = f"file:{file_path}"
 
             # IMPORTS edges
@@ -92,19 +116,19 @@ class GraphService:
                 imported = self._extract_import_target(imp, language)
                 if imported:
                     # Try to find matching file/symbol
-                    for target_key, target_id in node_map.items():
-                        target_name = target_key.split(":")[-1].split(".")[-1]
-                        if target_name == imported or target_key.endswith(imported):
-                            edges.append({
-                                "source": file_node_id,
-                                "target": target_id,
-                                "type": "IMPORTS",
-                                "metadata": {"import_statement": imp},
-                            })
-                            break
+                    target_id = resolve_symbol(imported, file_path)
+                    if target_id:
+                        edges.append({
+                            "source": file_node_id,
+                            "target": target_id,
+                            "type": "IMPORTS",
+                            "metadata": {"import_statement": imp},
+                        })
 
             # CALLS edges (best effort from static analysis)
             for sym in pf.get("symbols", []):
+                if sym.get("type") not in ("function", "method"):
+                    continue
                 sym_content = sym.get("content", "")
                 sym_name = sym.get("name", "")
 
@@ -119,11 +143,11 @@ class GraphService:
 
                 # Find function calls in the symbol body
                 calls = self._extract_calls(sym_content, language)
-                for call_name in calls:
+                for receiver, call_name in calls:
                     if call_name == sym_name:  # Skip self-recursion
                         continue
                     # Try to find the called symbol
-                    target_id = node_map.get(call_name)
+                    target_id = resolve_symbol(call_name, file_path, sym.get("parent"), receiver)
                     if target_id and target_id != caller_id:
                         edges.append({
                             "source": caller_id,
@@ -144,7 +168,7 @@ class GraphService:
                     continue
 
                 for base in bases:
-                    base_id = node_map.get(base)
+                    base_id = resolve_symbol(base, file_path, type_="class")
                     if base_id:
                         edges.append({
                             "source": sym_id,
@@ -197,18 +221,18 @@ class GraphService:
 
         return None
 
-    def _extract_calls(self, content: str, language: str) -> list[str]:
+    def _extract_calls(self, content: str, language: str) -> list[tuple[str | None, str]]:
         """Extract function/method call names from code content."""
         # Simple regex-based call extraction
-        # Matches: functionName( or obj.methodName(
+        # Matches functionName(, self.method(, and obj.method(.
         calls = set()
-        pattern = re.compile(r'(?:^|[^.\w])(\w+)\s*\(', re.MULTILINE)
+        pattern = re.compile(r'(?<![.\w])(?:(\w+)\s*\.\s*)?(\w+)\s*\(', re.MULTILINE)
 
         for m in pattern.finditer(content):
-            name = m.group(1)
+            receiver, name = m.groups()
             # Filter out language keywords and builtins
             if name not in _KEYWORDS and len(name) > 1:
-                calls.add(name)
+                calls.add((receiver, name))
 
         return list(calls)
 

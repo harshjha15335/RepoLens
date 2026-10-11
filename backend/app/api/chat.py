@@ -1,22 +1,70 @@
 """Chat API endpoints."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
 from app.core.database import get_db
-from app.core.errors import RepositoryNotFoundError, SessionNotFoundError
+from app.core.errors import RepositoryNotFoundError, RepositoryValidationError, SessionNotFoundError
 from app.core.logging import get_logger
-from app.models.models import Repository, ChatSession, ChatMessage, RepositoryStatus
+from app.models.models import ChatMessage, ChatSession, Repository, RepositoryFile, RepositoryStatus
 from app.schemas.schemas import (
-    ChatRequest, ChatResponse, SessionResponse, SessionListResponse,
-    SessionDetailResponse, MessageResponse, Citation,
+    ChatRequest,
+    ChatResponse,
+    Citation,
+    CodeContext,
+    MessageResponse,
+    SessionDetailResponse,
+    SessionListResponse,
+    SessionResponse,
 )
 from app.services.generation.service import GenerationService
 
 logger = get_logger(__name__)
 router = APIRouter()
+
+
+async def _resolve_code_context(
+    repository: Repository, context: CodeContext, db: AsyncSession
+) -> dict:
+    """Resolve a selection from an indexed source file, never from client text."""
+    if context.end_line < context.start_line:
+        raise RepositoryValidationError("Selected code line range is invalid")
+
+    file_result = await db.execute(
+        select(RepositoryFile).where(
+            RepositoryFile.repository_id == repository.id,
+            RepositoryFile.path == context.file_path,
+        )
+    )
+    if file_result.scalar_one_or_none() is None:
+        raise RepositoryValidationError("Selected code file is not indexed in this repository")
+    if not repository.storage_path:
+        raise RepositoryValidationError("Repository storage not found")
+
+    source_dir = (Path(repository.storage_path) / "source").resolve()
+    source_path = (source_dir / context.file_path).resolve()
+    if not source_path.is_relative_to(source_dir) or not source_path.is_file():
+        raise RepositoryValidationError("Selected code file is unavailable")
+
+    try:
+        lines = source_path.read_text(encoding="utf-8", errors="replace").split("\n")
+    except OSError as exc:
+        raise RepositoryValidationError(f"Cannot read selected code file: {exc}") from exc
+    if context.end_line > len(lines):
+        raise RepositoryValidationError("Selected code line range exceeds the source file")
+
+    return {
+        "chunk_id": None,
+        "file_path": context.file_path,
+        "start_line": context.start_line,
+        "end_line": context.end_line,
+        "content": "\n".join(lines[context.start_line - 1:context.end_line]),
+        "selected": True,
+        "action": context.action,
+    }
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -35,37 +83,40 @@ async def chat(
             f"Repository is not ready for querying (status: {repo.status.value})"
         )
 
+    code_context = (
+        await _resolve_code_context(repo, request.code_context, db)
+        if request.code_context else None
+    )
+
     # Get or create session
     session = None
     if request.session_id:
         session = await db.get(ChatSession, request.session_id)
         if not session:
             raise SessionNotFoundError(f"Session {request.session_id} not found")
+        if session.repository_id != request.repository_id:
+            raise RepositoryValidationError("Chat session belongs to a different repository")
 
     if not session:
         session = ChatSession(
             repository_id=request.repository_id,
             tutor_mode=request.tutor_mode.value,
         )
-        db.add(session)
-        await db.flush()
-
-    # Get conversation history
-    history_result = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.session_id == session.id)
-        .order_by(ChatMessage.created_at)
-    )
-    history = history_result.scalars().all()
-
-    # Save user message
-    user_msg = ChatMessage(
-        session_id=session.id,
-        role="user",
-        content=request.question,
-    )
-    db.add(user_msg)
-    await db.flush()
+    # Materialize history, then release the read transaction before slow model
+    # work. In particular, never flush a user message while generation runs:
+    # SQLite would hold its sole writer lock for the whole model request.
+    history = []
+    if request.session_id:
+        history_result = await db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session.id)
+            .order_by(ChatMessage.created_at)
+        )
+        history = [
+            {"role": m.role, "content": m.content}
+            for m in history_result.scalars().all()
+        ]
+    await db.commit()
 
     # Generate answer
     gen_service = GenerationService()
@@ -73,10 +124,21 @@ async def chat(
         repository_id=request.repository_id,
         question=request.question,
         tutor_mode=request.tutor_mode.value,
-        conversation_history=[
-            {"role": m.role, "content": m.content} for m in history
-        ],
+        conversation_history=history,
+        code_context=code_context,
     )
+
+    # Persist the successful exchange in one short transaction. A session may
+    # have been deleted while generation was running, so revalidate it first.
+    if request.session_id:
+        session = await db.get(ChatSession, request.session_id, populate_existing=True)
+        if not session:
+            raise SessionNotFoundError(f"Session {request.session_id} not found")
+    else:
+        db.add(session)
+        await db.flush()
+    session.tutor_mode = request.tutor_mode.value
+    db.add(ChatMessage(session_id=session.id, role="user", content=request.question))
 
     # Save assistant message
     assistant_msg = ChatMessage(
@@ -192,6 +254,7 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
                 role=m.role,
                 content=m.content,
                 citations=[Citation(**c) for c in (m.citations or [])],
+                retrieval_metadata=m.retrieval_metadata or {},
                 created_at=m.created_at,
             )
             for m in messages

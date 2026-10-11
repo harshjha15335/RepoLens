@@ -33,9 +33,9 @@ export async function POST() {
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Failed to load sample repository" },
+      { error: error instanceof Error ? error.message : "Failed to load sample repository" },
       { status: 500 }
     );
   }

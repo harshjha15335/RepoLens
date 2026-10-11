@@ -1,12 +1,10 @@
-version: "3.9"
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - codementor-data:/app/data
     environment:
@@ -14,8 +12,8 @@ services:
       - LOG_LEVEL=INFO
       - DATA_DIR=/app/data
       - DATABASE_URL=sqlite+aiosqlite:///./data/codementor.db
-      - EMBEDDING_PROVIDER=sentence-transformers
-      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-local}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - LLM_PROVIDER=ollama
       - LLM_MODEL=llama3.1:8b
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -24,7 +22,7 @@ services:
       ollama:
         condition: service_started
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/health')"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/health').raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,10 +32,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: http://backend:8000
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
       - backend
     restart: unless-stopped
@@ -45,7 +43,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     restart: unless-stopped

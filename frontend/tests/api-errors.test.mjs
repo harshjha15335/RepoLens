@@ -18,6 +18,7 @@ for (const [name, body, expected] of [
   ["structured detail", '{"detail":[{"msg":"Field required"}]}', '[{"msg":"Field required"}]'],
   ["empty response", "", "HTTP error 502"],
   ["null JSON", "null", "HTTP error 502"],
+  ["generic server error", "Internal Server Error", "The server could not complete this request (HTTP 502). Check that the backend is running and inspect its logs."],
 ]) {
   test(`reports ${name} without reading the response twice`, async (t) => {
     const response = new Response(body, { status: 502 });
@@ -34,4 +35,61 @@ for (const [name, body, expected] of [
 test("successful responses still return repository data", async (t) => {
   t.mock.method(globalThis, "fetch", async () => new Response('{"repositories":[],"total":0}'));
   assert.deepEqual(await api.getRepositories(), []);
+});
+
+function mockDeadlines(t) {
+  const timers = new Map();
+  let nextId = 0;
+  t.mock.method(globalThis, "setTimeout", (callback, delay) => {
+    const id = ++nextId;
+    timers.set(id, { callback, delay });
+    return id;
+  });
+  t.mock.method(globalThis, "clearTimeout", (id) => timers.delete(id));
+  return timers;
+}
+
+for (const [name, invoke, deadline] of [
+  ["ordinary request", () => api.getRepositories(), 30_000],
+  ["chat request", () => api.sendMessage({ repositoryId: "repo", question: "Explain", tutorMode: "developer" }), 160_000],
+]) {
+  test(`${name} aborts at its deadline and clears the timer`, async (t) => {
+    const timers = mockDeadlines(t);
+    let requestSignal;
+    t.mock.method(globalThis, "fetch", (_url, options) => {
+      requestSignal = options.signal;
+      return new Promise((_resolve, reject) => {
+        requestSignal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      });
+    });
+
+    const pending = invoke();
+    assert.equal(timers.size, 1);
+    const { callback, delay } = [...timers.values()][0];
+    assert.equal(delay, deadline);
+    callback();
+    await assert.rejects(pending, (error) => {
+      assert.match(error.message, /Request timed out after \d+ seconds/);
+      assert.match(error.message, /The client stopped waiting; server work may continue/);
+      return true;
+    });
+    assert.equal(requestSignal.aborted, true);
+    assert.equal(timers.size, 0);
+  });
+}
+
+test("deadline remains active while the response body is read, then clears", async (t) => {
+  const timers = mockDeadlines(t);
+  let bodyController;
+  t.mock.method(globalThis, "fetch", async () => new Response(new ReadableStream({
+    start(controller) { bodyController = controller; },
+  })));
+
+  const pending = api.getRepositories();
+  await new Promise(setImmediate);
+  assert.equal(timers.size, 1);
+  bodyController.enqueue(new TextEncoder().encode('{"repositories":[],"total":0}'));
+  bodyController.close();
+  assert.deepEqual(await pending, []);
+  assert.equal(timers.size, 0);
 });

@@ -4,9 +4,6 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-
-from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.database import get_session_factory
@@ -16,6 +13,7 @@ from app.models.models import EvaluationRun
 from app.services.retrieval.service import RetrievalService
 
 logger = get_logger(__name__)
+DEFAULT_DATASET = Path(__file__).resolve().parents[4] / "evaluation" / "datasets" / "default.json"
 
 
 class EvaluationService:
@@ -47,9 +45,20 @@ class EvaluationService:
                 questions = dataset["questions"]
                 retrieval = RetrievalService()
 
+                strategy_options = {
+                    "bm25": ("bm25", False),
+                    "dense": ("dense", False),
+                    "hybrid": ("hybrid", False),
+                    "hybrid_rrf": ("hybrid", False),
+                    "graph_expansion": ("hybrid", True),
+                }
+
                 all_results = []
 
                 for strategy in strategies:
+                    if strategy not in strategy_options:
+                        raise EvaluationError(f"Unknown evaluation strategy: {strategy}")
+                    retrieval_strategy, graph_expansion = strategy_options[strategy]
                     strategy_results = {
                         "strategy": strategy,
                         "recall_at_5": 0.0,
@@ -80,14 +89,13 @@ class EvaluationService:
                                 repository_id=repository_id,
                                 query=question_text,
                                 top_k=10,
-                                strategy=strategy,
-                                enable_graph_expansion=(strategy == "hybrid"),
+                                strategy=retrieval_strategy,
+                                enable_graph_expansion=graph_expansion,
                                 enable_mmr=False,  # Disable MMR for fair eval
                                 enable_reranking=False,
                             )
                         except Exception as e:
-                            logger.warning(f"Retrieval failed for '{question_text}': {e}")
-                            continue
+                            raise EvaluationError(f"Retrieval failed for '{question_text}': {e}") from e
 
                         latency = (time.time() - start) * 1000
                         chunks = result.get("chunks", [])
@@ -121,19 +129,12 @@ class EvaluationService:
                             ],
                         })
 
-                    if n_questions > 0:
-                        strategy_results["recall_at_5"] = round(
-                            total_recall_5 / n_questions, 4
-                        )
-                        strategy_results["recall_at_10"] = round(
-                            total_recall_10 / n_questions, 4
-                        )
-                        strategy_results["mrr"] = round(
-                            total_mrr / n_questions, 4
-                        )
-                        strategy_results["avg_latency_ms"] = round(
-                            total_latency / n_questions, 2
-                        )
+                    if n_questions == 0:
+                        raise EvaluationError("No valid evaluation questions found")
+                    strategy_results["recall_at_5"] = round(total_recall_5 / n_questions, 4)
+                    strategy_results["recall_at_10"] = round(total_recall_10 / n_questions, 4)
+                    strategy_results["mrr"] = round(total_mrr / n_questions, 4)
+                    strategy_results["avg_latency_ms"] = round(total_latency / n_questions, 2)
 
                     all_results.append(strategy_results)
 
@@ -177,25 +178,14 @@ class EvaluationService:
         if dataset_path:
             path = Path(dataset_path)
         else:
-            # Default dataset location
-            path = Path("evaluation/datasets/default.json")
+            path = DEFAULT_DATASET
 
         if not path.exists():
-            # Try relative to project root
-            alt_paths = [
-                Path("evaluation/datasets/default.json"),
-                Path("evaluation/datasets/sample.json"),
-            ]
-            for alt in alt_paths:
-                if alt.exists():
-                    path = alt
-                    break
-            else:
-                logger.warning("No evaluation dataset found")
-                return None
+            logger.warning("No evaluation dataset found at %s", path)
+            return None
 
         try:
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load dataset: {e}")
@@ -221,7 +211,7 @@ class EvaluationService:
             file_path = chunk.get("file_path", "")
             symbol = chunk.get("symbol_name", "")
 
-            retrieved_files.add(file_path)
+            retrieved_files.add(file_path.replace("\\", "/"))
             if symbol:
                 retrieved_symbols.add(symbol)
 
@@ -247,7 +237,7 @@ class EvaluationService:
     ) -> float:
         """Calculate reciprocal rank - 1/position of first relevant result."""
         for i, chunk in enumerate(chunks):
-            file_path = chunk.get("file_path", "")
+            file_path = chunk.get("file_path", "").replace("\\", "/")
             symbol = chunk.get("symbol_name", "")
 
             # Check file match

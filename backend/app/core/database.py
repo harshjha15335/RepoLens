@@ -1,6 +1,7 @@
 """Database engine and session management for CodeMentor-RAG."""
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import get_settings
@@ -25,6 +26,10 @@ def get_engine():
             echo=(settings.app_env == "development"),
             future=True,
         )
+        if settings.database_url.startswith("sqlite"):
+            @event.listens_for(_engine.sync_engine, "connect")
+            def enable_foreign_keys(connection, _connection_record):
+                connection.execute("PRAGMA foreign_keys=ON")
     return _engine
 
 

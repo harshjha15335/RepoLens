@@ -1,9 +1,10 @@
 """Pydantic request/response schemas for CodeMentor-RAG API."""
 
 from datetime import datetime
-from pydantic import BaseModel, Field
 from enum import Enum
+from typing import Literal
 
+from pydantic import BaseModel, Field
 
 # ─── Enums ───────────────────────────────────────────────────────
 
@@ -132,12 +133,21 @@ class Citation(BaseModel):
     content_preview: str | None = None
 
 
+class CodeContext(BaseModel):
+    action: Literal["explain", "debug", "trace"] | None = None
+    file_path: str = Field(..., min_length=1)
+    start_line: int = Field(..., ge=1)
+    end_line: int = Field(..., ge=1)
+    text: str | None = None
+
+
 class ChatRequest(BaseModel):
     repository_id: str
     session_id: str | None = None
     question: str = Field(..., min_length=1, max_length=2000)
     tutor_mode: TutorMode = TutorMode.DEVELOPER
     stream: bool = False
+    code_context: CodeContext | None = None
 
 
 class ChatResponse(BaseModel):
@@ -170,6 +180,7 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     citations: list[Citation] = []
+    retrieval_metadata: dict = Field(default_factory=dict)
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -242,6 +253,7 @@ class EvaluationResponse(BaseModel):
     metrics: list[EvaluationMetrics] = []
     created_at: datetime
     completed_at: datetime | None = None
+    error_message: str | None = None
 
 
 # ─── Health Schema ────────────────────────────────────────────────

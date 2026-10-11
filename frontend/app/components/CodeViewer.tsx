@@ -16,7 +16,7 @@ import {
   Settings,
   ChevronDown,
 } from "lucide-react";
-import { FileContent, CodeContextAttachment } from "../types";
+import { FileContent, CodeContextAttachment, TutorMode } from "../types";
 
 interface CodeViewerProps {
   repoName?: string;
@@ -28,9 +28,10 @@ interface CodeViewerProps {
   activeFilePath?: string;
   onSelectTab: (path: string) => void;
   onCloseTab: (path: string) => void;
-  onAttachContext?: (context: CodeContextAttachment, actionPrompt?: string) => void;
+  onAttachContext?: (context: CodeContextAttachment, actionPrompt?: string, mode?: TutorMode) => Promise<boolean>;
+  chatLoading?: boolean;
   fontSize?: number;
-  onSendMessage?: (question: string) => void;
+  onSendMessage?: (question: string) => Promise<boolean>;
   isRepoReady?: boolean;
   centerView?: "code" | "graph" | "retrieval" | "evaluation";
   onCenterViewChange?: (view: "code" | "graph" | "retrieval" | "evaluation") => void;
@@ -58,7 +59,7 @@ function highlightSyntax(line: string, language?: string | null): React.ReactNod
     [/(@\w+)/g, 'var(--syntax-keyword)'],
   ];
 
-  let spans: { start: number; end: number; color: string }[] = [];
+  const spans: { start: number; end: number; color: string }[] = [];
 
   for (const [regex, color] of rules) {
     let m;
@@ -114,6 +115,7 @@ export default function CodeViewer({
   onSelectTab,
   onCloseTab,
   onAttachContext,
+  chatLoading = false,
   fontSize = 14,
   onSendMessage,
   isRepoReady,
@@ -124,7 +126,7 @@ export default function CodeViewer({
   onOpenEvaluation,
 }: CodeViewerProps) {
   const [copied, setCopied] = useState(false);
-  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; text: string } | null>(null);
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; text: string; filePath: string } | null>(null);
   const [askInput, setAskInput] = useState("");
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const lineRefs = useRef<{ [line: number]: HTMLDivElement | null }>({});
@@ -140,11 +142,15 @@ export default function CodeViewer({
     }
   }, [highlightRange, fileContent]);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!fileContent) return;
-    navigator.clipboard.writeText(fileContent.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(fileContent.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      alert("Could not copy the file. Check clipboard access and try again.");
+    }
   };
 
   const handleDownload = () => {
@@ -153,7 +159,7 @@ export default function CodeViewer({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = (activeFilePath || fileContent.path).split("/").pop() || "source.txt";
+    a.download = (activeFilePath || fileContent.path).split(/[\\/]/).pop() || "source.txt";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -166,27 +172,45 @@ export default function CodeViewer({
       setSelectionRange(null);
       return;
     }
-    const text = sel.toString().trim();
-    if (text.length > 5) {
-      const preSelection = fileContent.content.substring(0, Math.max(0, fileContent.content.indexOf(text)));
-      const startLine = preSelection.split("\n").length;
-      const endLine = startLine + text.split("\n").length - 1;
-      setSelectionRange({ start: startLine, end: endLine, text });
-    } else {
+    const selectedLine = (node: Node | null) => {
+      const element = node instanceof Element ? node : node?.parentElement;
+      const line = element?.closest<HTMLElement>("[data-source-line]");
+      return line && containerRef.current?.contains(line) ? Number(line.dataset.sourceLine) : null;
+    };
+    const anchorLine = selectedLine(sel.anchorNode);
+    const focusLine = selectedLine(sel.focusNode);
+    if (!anchorLine || !focusLine || !sel.toString().trim()) {
       setSelectionRange(null);
+      return;
     }
+    const start = Math.min(anchorLine, focusLine);
+    const end = Math.max(anchorLine, focusLine);
+    const text = fileContent.content.split("\n").slice(start - 1, end).join("\n");
+    setSelectionRange({ start, end, text, filePath: fileContent.path });
   };
 
   const handleAskSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!askInput.trim() || !onSendMessage) return;
-    onSendMessage(askInput.trim());
-    setAskInput("");
+    if (!askInput.trim() || !onSendMessage || chatLoading || !isRepoReady) return;
+    const question = askInput.trim();
+    if (selectionRange && selectionRange.filePath === fileContent?.path && onAttachContext) {
+      void onAttachContext({
+        file_path: selectionRange.filePath,
+        start_line: selectionRange.start,
+        end_line: selectionRange.end,
+        text: selectionRange.text,
+      }, question).then((sent) => {
+        if (sent) setAskInput((current) => current === question ? "" : current);
+      });
+      setSelectionRange(null);
+    } else {
+      void onSendMessage(question).then((sent) => {
+        if (sent) setAskInput((current) => current === question ? "" : current);
+      });
+    }
   };
 
   const lines = fileContent?.content ? fileContent.content.split("\n") : [];
-  const fileName = (activeFilePath || fileContent?.path || "").split("/").pop() || "";
-
   const isReady = repoStatus?.toLowerCase() === "ready";
   const isFailed = repoStatus?.toLowerCase() === "failed";
   const isIndexing = !isReady && !isFailed && repoStatus != null;
@@ -563,9 +587,11 @@ export default function CodeViewer({
       </div>
 
       {/* ─── 3. SELECTION ACTION BAR ─── */}
-      {selectionRange && onAttachContext && (
+      {selectionRange && selectionRange.filePath === fileContent?.path && onAttachContext && (
         <div
           className="fade-in"
+          onMouseDown={(event) => event.preventDefault()}
+          onMouseUp={(event) => event.stopPropagation()}
           style={{
             position: "absolute",
             top: 102,
@@ -610,6 +636,7 @@ export default function CodeViewer({
           ].map(({ label, icon: Icon, prompt }) => (
             <button
               key={label}
+              disabled={chatLoading || !isReady}
               onClick={() => {
                 if (fileContent) {
                   onAttachContext(
@@ -618,8 +645,10 @@ export default function CodeViewer({
                       start_line: selectionRange.start,
                       end_line: selectionRange.end,
                       text: selectionRange.text,
+                      action: label === "Explain" ? "explain" : label === "Debug" ? "debug" : "trace",
                     },
-                    prompt
+                    prompt,
+                    label === "Explain" ? undefined : "debug"
                   );
                 }
                 setSelectionRange(null);
@@ -632,7 +661,8 @@ export default function CodeViewer({
                 borderRadius: 8,
                 fontSize: 11,
                 fontWeight: 500,
-                cursor: "pointer",
+                cursor: chatLoading || !isReady ? "not-allowed" : "pointer",
+                opacity: chatLoading || !isReady ? 0.5 : 1,
                 background: label === "Explain" ? "var(--blue)" : "var(--surface-hover)",
                 color: label === "Explain" ? "white" : "var(--text-primary)",
                 border: label === "Explain" ? "none" : "1px solid var(--border)",
@@ -713,6 +743,7 @@ export default function CodeViewer({
               return (
                 <div
                   key={lineNumber}
+                  data-source-line={lineNumber}
                   ref={(el) => {
                     lineRefs.current[lineNumber] = el;
                   }}
@@ -786,9 +817,11 @@ export default function CodeViewer({
             type="text"
             value={askInput}
             onChange={(e) => setAskInput(e.target.value)}
-            disabled={!isRepoReady}
+            disabled={!isRepoReady || chatLoading}
             placeholder={
-              !isRepoReady
+              chatLoading
+                ? "Waiting for response..."
+                : !isRepoReady
                 ? "Waiting for indexing..."
                 : selectionRange
                 ? `Ask about L${selectionRange.start}-${selectionRange.end}...`
@@ -806,7 +839,7 @@ export default function CodeViewer({
           />
           <button
             type="submit"
-            disabled={!askInput.trim() || !isRepoReady}
+            disabled={!askInput.trim() || !isRepoReady || chatLoading}
             style={{
               width: 30,
               height: 30,

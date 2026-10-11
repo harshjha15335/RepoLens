@@ -1,0 +1,1191 @@
+[
+  {
+    "check": "frontend proxy and API health",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "a044a248-81e8-42c0-bacf-18ea31f1bee2: terminal indexing state READY",
+    "passed": true,
+    "detail": {
+      "id": "a044a248-81e8-42c0-bacf-18ea31f1bee2",
+      "name": "calculator",
+      "source_type": "zip",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python"
+      ],
+      "stats": {
+        "files": 4,
+        "chunks": 42,
+        "symbols": 37,
+        "graph_nodes": 30,
+        "graph_edges": 39
+      },
+      "created_at": "2026-10-11T16:14:58.235224",
+      "updated_at": "2026-10-11T18:16:56.364828",
+      "indexed_at": "2026-10-11T18:16:56.363825"
+    }
+  },
+  {
+    "check": "calculator reindex has four unique files",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: README.md",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: src\\calculator.py",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: src\\parser.py",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: src\\scientific.py",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "6a583c76-49f6-4d7e-98c9-cc277a73f907: terminal indexing state READY",
+    "passed": true,
+    "detail": {
+      "id": "6a583c76-49f6-4d7e-98c9-cc277a73f907",
+      "name": "calculator",
+      "source_type": "zip",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python"
+      ],
+      "stats": {
+        "files": 4,
+        "chunks": 42,
+        "symbols": 37,
+        "graph_nodes": 30,
+        "graph_edges": 39
+      },
+      "created_at": "2026-10-11T16:07:39.860078",
+      "updated_at": "2026-10-11T18:16:56.960477",
+      "indexed_at": "2026-10-11T18:16:56.959478"
+    }
+  },
+  {
+    "check": "calculator reindex has four unique files",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: README.md",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: src\\calculator.py",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: src\\parser.py",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "calculator file opens: src\\scientific.py",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "063a2452-8455-410e-8047-852f956582a0: terminal indexing state READY",
+    "passed": true,
+    "detail": {
+      "id": "063a2452-8455-410e-8047-852f956582a0",
+      "name": "repolens-audit-fixture",
+      "source_type": "zip",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python",
+        "typescript"
+      ],
+      "stats": {
+        "files": 4,
+        "chunks": 12,
+        "symbols": 12,
+        "graph_nodes": 12,
+        "graph_edges": 10
+      },
+      "created_at": "2026-10-11T18:16:57.136954",
+      "updated_at": "2026-10-11T18:16:57.400759",
+      "indexed_at": "2026-10-11T18:16:57.399415"
+    }
+  },
+  {
+    "check": "063a2452-8455-410e-8047-852f956582a0: terminal indexing state READY",
+    "passed": true,
+    "detail": {
+      "id": "063a2452-8455-410e-8047-852f956582a0",
+      "name": "repolens-audit-fixture",
+      "source_type": "zip",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python",
+        "typescript"
+      ],
+      "stats": {
+        "files": 4,
+        "chunks": 12,
+        "symbols": 12,
+        "graph_nodes": 12,
+        "graph_edges": 10
+      },
+      "created_at": "2026-10-11T18:16:57.136954",
+      "updated_at": "2026-10-11T18:16:57.810430",
+      "indexed_at": "2026-10-11T18:16:57.809448"
+    }
+  },
+  {
+    "check": "ZIP reindex preserves record counts",
+    "passed": true,
+    "detail": {
+      "files": 4,
+      "chunks": 12,
+      "symbols": 12,
+      "graph_nodes": 12,
+      "graph_edges": 10
+    }
+  },
+  {
+    "check": "mixed Python TypeScript TSX upload indexes all files",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "TypeScript and TSX symbols parsed",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "fixture file content opens: README.md",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "fixture file content opens: src\\arithmetic.py",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "fixture file content opens: src\\tool.ts",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "fixture file content opens: src\\view.tsx",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "knowledge graph has valid edge endpoints",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "call flow resolves divide to own guard",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "classes are not fabricated method callers",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "retrieval strategy bm25",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "retrieval strategy dense",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "retrieval strategy hybrid_rrf",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "retrieval strategy graph_expansion",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat mode returns cited evidence: beginner",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat session persists question and answer: beginner",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat mode returns cited evidence: developer",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat session persists question and answer: developer",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat mode returns cited evidence: interview",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat session persists question and answer: interview",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat mode returns cited evidence: debug",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "chat session persists question and answer: debug",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "tutor modes change answer framing",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "interview generates requested questions",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "interview inheritance uses real class relationship",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "interview answer feedback and citations",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "invalid interview input rejected without 500",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "benchmark finishes with four strategy rows",
+    "passed": true,
+    "detail": {
+      "id": "f22efa66-af80-4055-8fe4-61cfb07c879b",
+      "repository_id": "a044a248-81e8-42c0-bacf-18ea31f1bee2",
+      "status": "completed",
+      "metrics": [
+        {
+          "strategy": "bm25",
+          "recall_at_5": 0.5626,
+          "recall_at_10": 0.7248,
+          "mrr": 0.7827,
+          "avg_latency_ms": 7.4,
+          "results": [
+            {
+              "question_id": "q001",
+              "question": "What does this repository do?",
+              "recall_at_5": 0.3333,
+              "recall_at_10": 0.3333,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 24.36,
+              "retrieved_files": [
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q002",
+              "question": "Where is the Calculator class defined?",
+              "recall_at_5": 0.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 0.1429,
+              "latency_ms": 7.44,
+              "retrieved_files": [
+                "README.md",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q003",
+              "question": "How does division work? What happens with division by zero?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 7.77,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\parser.py",
+                "src\\parser.py",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q004",
+              "question": "Explain the architecture of this project",
+              "recall_at_5": 0.5714,
+              "recall_at_10": 0.7143,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 5.52,
+              "retrieved_files": [
+                "README.md",
+                "src\\calculator.py",
+                "README.md",
+                "src\\scientific.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q005",
+              "question": "What is the inheritance hierarchy?",
+              "recall_at_5": 0.5,
+              "recall_at_10": 0.75,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 5.41,
+              "retrieved_files": [
+                "README.md",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q006",
+              "question": "How does the expression parser handle operator precedence?",
+              "recall_at_5": 0.4,
+              "recall_at_10": 0.4,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 5.41,
+              "retrieved_files": [
+                "README.md",
+                "src\\parser.py",
+                "README.md",
+                "src\\parser.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q007",
+              "question": "What methods does the ScientificCalculator add?",
+              "recall_at_5": 0.1429,
+              "recall_at_10": 0.1429,
+              "reciprocal_rank": 0.25,
+              "latency_ms": 4.41,
+              "retrieved_files": [
+                "README.md",
+                "README.md",
+                "README.md",
+                "src\\scientific.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q008",
+              "question": "How is the operation history tracked?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 5.0,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "README.md",
+                "src\\calculator.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q009",
+              "question": "What calls the _record method?",
+              "recall_at_5": 0.4286,
+              "recall_at_10": 0.8571,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 5.42,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q010",
+              "question": "How does the tokenizer work in the expression parser?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 5.18,
+              "retrieved_files": [
+                "src\\parser.py",
+                "README.md",
+                "src\\parser.py",
+                "src\\parser.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q011",
+              "question": "Where might ValueError exceptions originate?",
+              "recall_at_5": 0.875,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 6.29,
+              "retrieved_files": [
+                "src\\parser.py",
+                "src\\calculator.py",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q012",
+              "question": "What dependencies does the scientific calculator have?",
+              "recall_at_5": 0.5,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 6.64,
+              "retrieved_files": [
+                "src\\scientific.py",
+                "README.md",
+                "src\\parser.py",
+                "src\\calculator.py",
+                "src\\calculator.py"
+              ]
+            }
+          ]
+        },
+        {
+          "strategy": "dense",
+          "recall_at_5": 0.4924,
+          "recall_at_10": 0.7003,
+          "mrr": 0.7292,
+          "avg_latency_ms": 6.92,
+          "results": [
+            {
+              "question_id": "q001",
+              "question": "What does this repository do?",
+              "recall_at_5": 0.3333,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 18.15,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q002",
+              "question": "Where is the Calculator class defined?",
+              "recall_at_5": 0.0,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 0.1667,
+              "latency_ms": 6.0,
+              "retrieved_files": [
+                "src\\parser.py",
+                "src\\scientific.py",
+                "README.md",
+                "src\\parser.py",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q003",
+              "question": "How does division work? What happens with division by zero?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 5.87,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "README.md",
+                "README.md",
+                "README.md",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q004",
+              "question": "Explain the architecture of this project",
+              "recall_at_5": 0.4286,
+              "recall_at_10": 0.7143,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 5.88,
+              "retrieved_files": [
+                "README.md",
+                "README.md",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q005",
+              "question": "What is the inheritance hierarchy?",
+              "recall_at_5": 0.25,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 0.3333,
+              "latency_ms": 5.98,
+              "retrieved_files": [
+                "README.md",
+                "src\\parser.py",
+                "src\\calculator.py",
+                "src\\parser.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q006",
+              "question": "How does the expression parser handle operator precedence?",
+              "recall_at_5": 0.2,
+              "recall_at_10": 0.6,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 6.31,
+              "retrieved_files": [
+                "README.md",
+                "src\\parser.py",
+                "src\\parser.py",
+                "README.md",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q007",
+              "question": "What methods does the ScientificCalculator add?",
+              "recall_at_5": 0.1429,
+              "recall_at_10": 0.1429,
+              "reciprocal_rank": 0.25,
+              "latency_ms": 5.51,
+              "retrieved_files": [
+                "README.md",
+                "README.md",
+                "README.md",
+                "src\\scientific.py",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q008",
+              "question": "How is the operation history tracked?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 6.2,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "README.md",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q009",
+              "question": "What calls the _record method?",
+              "recall_at_5": 0.4286,
+              "recall_at_10": 0.5714,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 4.95,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "README.md",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q010",
+              "question": "How does the tokenizer work in the expression parser?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 5.74,
+              "retrieved_files": [
+                "README.md",
+                "src\\parser.py",
+                "src\\parser.py",
+                "README.md",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q011",
+              "question": "Where might ValueError exceptions originate?",
+              "recall_at_5": 0.625,
+              "recall_at_10": 0.875,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 5.94,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q012",
+              "question": "What dependencies does the scientific calculator have?",
+              "recall_at_5": 0.5,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 6.49,
+              "retrieved_files": [
+                "src\\scientific.py",
+                "README.md",
+                "src\\parser.py",
+                "README.md",
+                "README.md"
+              ]
+            }
+          ]
+        },
+        {
+          "strategy": "hybrid_rrf",
+          "recall_at_5": 0.5459,
+          "recall_at_10": 0.7226,
+          "mrr": 0.7812,
+          "avg_latency_ms": 8.07,
+          "results": [
+            {
+              "question_id": "q001",
+              "question": "What does this repository do?",
+              "recall_at_5": 0.3333,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 7.26,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q002",
+              "question": "Where is the Calculator class defined?",
+              "recall_at_5": 0.0,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 0.125,
+              "latency_ms": 7.18,
+              "retrieved_files": [
+                "README.md",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\parser.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q003",
+              "question": "How does division work? What happens with division by zero?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 8.42,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "README.md",
+                "README.md",
+                "src\\calculator.py",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q004",
+              "question": "Explain the architecture of this project",
+              "recall_at_5": 0.5714,
+              "recall_at_10": 0.7143,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 7.41,
+              "retrieved_files": [
+                "README.md",
+                "README.md",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q005",
+              "question": "What is the inheritance hierarchy?",
+              "recall_at_5": 0.5,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 9.29,
+              "retrieved_files": [
+                "README.md",
+                "src\\calculator.py",
+                "src\\parser.py",
+                "src\\calculator.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q006",
+              "question": "How does the expression parser handle operator precedence?",
+              "recall_at_5": 0.2,
+              "recall_at_10": 0.6,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 8.05,
+              "retrieved_files": [
+                "src\\parser.py",
+                "README.md",
+                "README.md",
+                "README.md",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q007",
+              "question": "What methods does the ScientificCalculator add?",
+              "recall_at_5": 0.1429,
+              "recall_at_10": 0.1429,
+              "reciprocal_rank": 0.25,
+              "latency_ms": 8.23,
+              "retrieved_files": [
+                "README.md",
+                "README.md",
+                "README.md",
+                "src\\scientific.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q008",
+              "question": "How is the operation history tracked?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 8.33,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "README.md",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q009",
+              "question": "What calls the _record method?",
+              "recall_at_5": 0.4286,
+              "recall_at_10": 0.7143,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 11.0,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\calculator.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q010",
+              "question": "How does the tokenizer work in the expression parser?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 7.25,
+              "retrieved_files": [
+                "README.md",
+                "src\\parser.py",
+                "README.md",
+                "src\\parser.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q011",
+              "question": "Where might ValueError exceptions originate?",
+              "recall_at_5": 0.875,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 7.09,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q012",
+              "question": "What dependencies does the scientific calculator have?",
+              "recall_at_5": 0.5,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 7.3,
+              "retrieved_files": [
+                "src\\scientific.py",
+                "README.md",
+                "src\\parser.py",
+                "README.md",
+                "README.md"
+              ]
+            }
+          ]
+        },
+        {
+          "strategy": "graph_expansion",
+          "recall_at_5": 0.5459,
+          "recall_at_10": 0.7226,
+          "mrr": 0.7812,
+          "avg_latency_ms": 10.65,
+          "results": [
+            {
+              "question_id": "q001",
+              "question": "What does this repository do?",
+              "recall_at_5": 0.3333,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 6.25,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q002",
+              "question": "Where is the Calculator class defined?",
+              "recall_at_5": 0.0,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 0.125,
+              "latency_ms": 7.35,
+              "retrieved_files": [
+                "README.md",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\parser.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q003",
+              "question": "How does division work? What happens with division by zero?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 7.16,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "README.md",
+                "README.md",
+                "src\\calculator.py",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q004",
+              "question": "Explain the architecture of this project",
+              "recall_at_5": 0.5714,
+              "recall_at_10": 0.7143,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 19.51,
+              "retrieved_files": [
+                "README.md",
+                "README.md",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q005",
+              "question": "What is the inheritance hierarchy?",
+              "recall_at_5": 0.5,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 7.69,
+              "retrieved_files": [
+                "README.md",
+                "src\\calculator.py",
+                "src\\parser.py",
+                "src\\calculator.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q006",
+              "question": "How does the expression parser handle operator precedence?",
+              "recall_at_5": 0.2,
+              "recall_at_10": 0.6,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 7.39,
+              "retrieved_files": [
+                "src\\parser.py",
+                "README.md",
+                "README.md",
+                "README.md",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q007",
+              "question": "What methods does the ScientificCalculator add?",
+              "recall_at_5": 0.1429,
+              "recall_at_10": 0.1429,
+              "reciprocal_rank": 0.25,
+              "latency_ms": 7.5,
+              "retrieved_files": [
+                "README.md",
+                "README.md",
+                "README.md",
+                "src\\scientific.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q008",
+              "question": "How is the operation history tracked?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 8.28,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "src\\calculator.py",
+                "README.md",
+                "README.md"
+              ]
+            },
+            {
+              "question_id": "q009",
+              "question": "What calls the _record method?",
+              "recall_at_5": 0.4286,
+              "recall_at_10": 0.7143,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 17.52,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\calculator.py",
+                "src\\calculator.py"
+              ]
+            },
+            {
+              "question_id": "q010",
+              "question": "How does the tokenizer work in the expression parser?",
+              "recall_at_5": 1.0,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 0.5,
+              "latency_ms": 7.45,
+              "retrieved_files": [
+                "README.md",
+                "src\\parser.py",
+                "README.md",
+                "src\\parser.py",
+                "src\\parser.py"
+              ]
+            },
+            {
+              "question_id": "q011",
+              "question": "Where might ValueError exceptions originate?",
+              "recall_at_5": 0.875,
+              "recall_at_10": 1.0,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 15.93,
+              "retrieved_files": [
+                "src\\calculator.py",
+                "src\\scientific.py",
+                "src\\scientific.py",
+                "src\\parser.py",
+                "src\\scientific.py"
+              ]
+            },
+            {
+              "question_id": "q012",
+              "question": "What dependencies does the scientific calculator have?",
+              "recall_at_5": 0.5,
+              "recall_at_10": 0.5,
+              "reciprocal_rank": 1.0,
+              "latency_ms": 15.76,
+              "retrieved_files": [
+                "src\\scientific.py",
+                "README.md",
+                "src\\parser.py",
+                "README.md",
+                "README.md"
+              ]
+            }
+          ]
+        }
+      ],
+      "created_at": "2026-10-11T18:17:01.291993",
+      "completed_at": "2026-10-11T18:17:01.705814",
+      "error_message": null
+    }
+  },
+  {
+    "check": "file path traversal rejected",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "unsupported upload type rejected",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "13e658d5-9daa-4589-a2fb-2772eebe45d4: terminal indexing state FAILED",
+    "passed": true,
+    "detail": {
+      "id": "13e658d5-9daa-4589-a2fb-2772eebe45d4",
+      "name": "repolens-audit-unsafe",
+      "source_type": "zip",
+      "status": "FAILED",
+      "progress": 5,
+      "progress_message": "Extracting repository...",
+      "error_message": "Path traversal detected: ../escape.py",
+      "languages": [],
+      "stats": {
+        "files": 0,
+        "chunks": 0,
+        "symbols": 0,
+        "graph_nodes": 0,
+        "graph_edges": 0
+      },
+      "created_at": "2026-10-11T18:17:01.811870",
+      "updated_at": "2026-10-11T18:17:01.849331",
+      "indexed_at": null
+    }
+  },
+  {
+    "check": "41018a0e-af6a-459e-8d82-83db85e17655: terminal indexing state READY",
+    "passed": true,
+    "detail": {
+      "id": "41018a0e-af6a-459e-8d82-83db85e17655",
+      "name": "fixture",
+      "source_type": "git",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python"
+      ],
+      "stats": {
+        "files": 1,
+        "chunks": 0,
+        "symbols": 0,
+        "graph_nodes": 1,
+        "graph_edges": 0
+      },
+      "created_at": "2026-10-11T18:17:02.888239",
+      "updated_at": "2026-10-11T18:17:03.856903",
+      "indexed_at": "2026-10-11T18:17:03.856269"
+    }
+  },
+  {
+    "check": "41018a0e-af6a-459e-8d82-83db85e17655: terminal indexing state READY",
+    "passed": true,
+    "detail": {
+      "id": "41018a0e-af6a-459e-8d82-83db85e17655",
+      "name": "fixture",
+      "source_type": "git",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python"
+      ],
+      "stats": {
+        "files": 1,
+        "chunks": 0,
+        "symbols": 0,
+        "graph_nodes": 1,
+        "graph_edges": 0
+      },
+      "created_at": "2026-10-11T18:17:02.888239",
+      "updated_at": "2026-10-11T18:17:04.939222",
+      "indexed_at": "2026-10-11T18:17:04.937221"
+    }
+  },
+  {
+    "check": "Git import and reindex preserve selected non-default branch",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "delete disposable audit repository",
+    "passed": true,
+    "detail": "{\"message\":\"Repository 063a2452-8455-410e-8047-852f956582a0 deleted\"}"
+  },
+  {
+    "check": "deleted repository no longer accessible",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "delete disposable audit repository",
+    "passed": true,
+    "detail": "{\"message\":\"Repository 13e658d5-9daa-4589-a2fb-2772eebe45d4 deleted\"}"
+  },
+  {
+    "check": "deleted repository no longer accessible",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "delete disposable audit repository",
+    "passed": true,
+    "detail": "{\"message\":\"Repository 41018a0e-af6a-459e-8d82-83db85e17655 deleted\"}"
+  },
+  {
+    "check": "deleted repository no longer accessible",
+    "passed": true,
+    "detail": null
+  }
+]

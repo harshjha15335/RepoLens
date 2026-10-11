@@ -6,17 +6,14 @@ import {
   FileCode,
   Boxes,
   Sparkles,
-  Command,
   Network,
   GraduationCap,
   BarChart3,
   Settings,
-  Sun,
-  Moon,
   Upload,
   ArrowRight,
 } from "lucide-react";
-import { FileInfo, SymbolInfo, TutorMode } from "../types";
+import { ActiveActivityView, FileInfo, SymbolInfo, TutorMode } from "../types";
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -26,11 +23,10 @@ interface CommandPaletteProps {
   onSelectFile: (path: string) => void;
   onSelectSymbol: (symbol: SymbolInfo) => void;
   onSelectTutorMode: (mode: TutorMode) => void;
-  onNavigateView: (view: any) => void;
+  onNavigateView: (view: ActiveActivityView) => void;
   onOpenUpload: () => void;
   onOpenEvaluation: () => void;
   onOpenSettings: () => void;
-  onToggleTheme: () => void;
   onAskQuestion: (q: string) => void;
 }
 
@@ -46,7 +42,6 @@ export default function CommandPalette({
   onOpenUpload,
   onOpenEvaluation,
   onOpenSettings,
-  onToggleTheme,
   onAskQuestion,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
@@ -54,11 +49,13 @@ export default function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => {
       setQuery("");
       setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
+      inputRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -136,16 +133,6 @@ export default function CommandPalette({
       },
     },
     {
-      id: "toggle-theme",
-      title: "Toggle Dark / Light Theme",
-      category: "Appearance",
-      icon: Sun,
-      action: () => {
-        onToggleTheme();
-        onClose();
-      },
-    },
-    {
       id: "import-repo",
       title: "Import Repository (ZIP or Git)",
       category: "Repository",
@@ -170,7 +157,12 @@ export default function CommandPalette({
   );
 
   // Flatten options for arrow key navigation
-  const allItems: { type: string; item: any; execute: () => void }[] = [];
+  type PaletteEntry =
+    | { type: "file"; item: FileInfo; execute: () => void }
+    | { type: "symbol"; item: SymbolInfo; execute: () => void }
+    | { type: "action"; item: (typeof actions)[number]; execute: () => void }
+    | { type: "ask"; item: { query: string }; execute: () => void };
+  const allItems: PaletteEntry[] = [];
 
   matchingFiles.forEach((f) => {
     allItems.push({
@@ -294,7 +286,7 @@ export default function CommandPalette({
               }
 
               if (entry.type === "file") {
-                const f: FileInfo = entry.item;
+                const f = entry.item;
                 return (
                   <div
                     key={f.id || f.path}
@@ -318,7 +310,7 @@ export default function CommandPalette({
               }
 
               if (entry.type === "symbol") {
-                const s: SymbolInfo = entry.item;
+                const s = entry.item;
                 return (
                   <div
                     key={`${s.name}-${s.file_path}-${s.start_line}`}

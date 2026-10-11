@@ -20,20 +20,25 @@ import {
   Trash2,
   Search,
 } from "lucide-react";
-import { ChatMessage, TutorMode, Citation, RetrievedChunk, CodeContextAttachment } from "../types";
+import { ChatMessage, ChatSession, TutorMode, Citation, RetrievedChunk, CodeContextAttachment } from "../types";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
   loading: boolean;
   tutorMode: TutorMode;
   onTutorModeChange: (mode: TutorMode) => void;
-  onSendMessage: (question: string, contextAttachment?: CodeContextAttachment) => void;
+  onSendMessage: (question: string, contextAttachment?: CodeContextAttachment) => Promise<boolean>;
   onCitationClick: (citation: Citation) => void;
   contextAttachment?: CodeContextAttachment | null;
   onRemoveContext?: () => void;
   repoName?: string;
   isRepoReady: boolean;
   onOpenInterview?: () => void;
+  sessions: ChatSession[];
+  currentSessionId?: string;
+  onNewSession: () => void;
+  onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
 }
 
 const SUGGESTED_PROMPTS = [
@@ -43,6 +48,24 @@ const SUGGESTED_PROMPTS = [
   "Trace what calls the _record method",
   "How does the expression parser work?",
 ];
+
+function ResponseTimer() {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const intervalId = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  return (
+    <span aria-live="polite">
+      {elapsedSeconds >= 20 ? "Local model is still generating" : "Waiting for response"} · {elapsedSeconds}s
+    </span>
+  );
+}
 
 export default function ChatPanel({
   messages,
@@ -56,6 +79,11 @@ export default function ChatPanel({
   repoName,
   isRepoReady,
   onOpenInterview,
+  sessions,
+  currentSessionId,
+  onNewSession,
+  onSelectSession,
+  onDeleteSession,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [expandedRetrieval, setExpandedRetrieval] = useState<{ [msgId: string]: boolean }>({});
@@ -71,8 +99,10 @@ export default function ChatPanel({
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || loading || !isRepoReady) return;
-    onSendMessage(input.trim(), contextAttachment || undefined);
-    setInput("");
+    const question = input.trim();
+    void onSendMessage(question, contextAttachment || undefined).then((sent) => {
+      if (sent) setInput((current) => current === question ? "" : current);
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -86,13 +116,17 @@ export default function ChatPanel({
     setExpandedRetrieval((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
   };
 
-  const copyText = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCode(id);
-    setTimeout(() => setCopiedCode(null), 2000);
+  const copyText = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedCode(id);
+      setTimeout(() => setCopiedCode(null), 2000);
+    } catch {
+      alert("Could not copy the code. Check clipboard access and try again.");
+    }
   };
 
-  const renderMessageContent = (content: string) => {
+  const renderMessageContent = (content: string, messageId: string) => {
     const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
     type MessagePart = { type: "text"; content: string } | { type: "code"; language: string; code: string };
     const parts: MessagePart[] = [];
@@ -115,7 +149,7 @@ export default function ChatPanel({
       <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
         {parts.map((part, i) => {
           if (part.type === "code") {
-            const blockId = `block-${i}`;
+            const blockId = `${messageId}-block-${i}`;
             return (
               <div key={i} style={{
                 margin: '10px 0', borderRadius: 10, overflow: 'hidden',
@@ -178,6 +212,7 @@ export default function ChatPanel({
         <div style={{ position: 'relative' }}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Chat options"
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               padding: 4, borderRadius: 6, display: 'flex',
@@ -193,19 +228,18 @@ export default function ChatPanel({
               <div style={{ position: 'fixed', inset: 0, zIndex: 50 }} onClick={() => setMenuOpen(false)} />
               <div style={{
                 position: 'absolute', right: 0, top: '100%', marginTop: 4,
-                width: 180, background: 'var(--surface)',
+                width: 240, maxHeight: 360, overflowY: 'auto', background: 'var(--surface)',
                 borderRadius: 10, border: '1px solid var(--border)',
                 boxShadow: 'var(--shadow-floating)', padding: 4, zIndex: 51,
               }}>
                 {[
-                  { label: "New Chat", icon: Plus },
-                  { label: "Chat History", icon: History },
-                  { label: "Clear Conversation", icon: Trash2 },
-                  { label: "Retrieval Details", icon: Search },
-                ].map(({ label, icon: Icon }) => (
+                  { label: "New Chat", icon: Plus, action: onNewSession },
+                  { label: "Start Interview", icon: History, action: onOpenInterview },
+                ].map(({ label, icon: Icon, action }) => (
                   <button
                     key={label}
-                    onClick={() => setMenuOpen(false)}
+                    onClick={() => { action?.(); setMenuOpen(false); }}
+                    disabled={!isRepoReady}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                       padding: '7px 10px', borderRadius: 6, border: 'none',
@@ -220,6 +254,22 @@ export default function ChatPanel({
                     {label}
                   </button>
                 ))}
+                {sessions.length > 0 && (
+                  <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
+                    <div style={{ padding: '5px 10px', fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Recent chats</div>
+                    {sessions.map((session) => (
+                      <div key={session.id} style={{ display: 'flex', alignItems: 'center', background: currentSessionId === session.id ? 'var(--surface-selected)' : 'transparent', borderRadius: 6 }}>
+                        <button
+                          onClick={() => { onSelectSession(session.id); setMenuOpen(false); }}
+                          style={{ flex: 1, minWidth: 0, padding: '7px 10px', border: 'none', background: 'transparent', textAlign: 'left', color: 'var(--text-primary)', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}
+                        >
+                          {session.title || `Chat ${new Date(session.created_at).toLocaleDateString()}`}
+                        </button>
+                        <button aria-label={`Delete ${session.title || 'chat'}`} title="Delete chat" onClick={() => onDeleteSession(session.id)} style={{ padding: 6, display: 'flex', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><Trash2 size={13} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -241,10 +291,6 @@ export default function ChatPanel({
             <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>
               CodeMentor AI Tutor
             </h3>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 20px', lineHeight: 1.5 }}>
-              Ask about architecture, symbols, call graphs, or debugging. Answers include interactive citations.
-            </p>
-
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6, textAlign: 'center' }}>
                 Suggested questions
@@ -276,6 +322,8 @@ export default function ChatPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {messages.map((msg) => {
               const isUser = msg.role === "user";
+              const messageMode = typeof msg.retrieval_metadata?.tutor_mode === "string"
+                ? msg.retrieval_metadata.tutor_mode : tutorMode;
               return (
                 <div key={msg.id} style={{
                   display: 'flex', gap: 8,
@@ -305,7 +353,7 @@ export default function ChatPanel({
                           textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em',
                           background: 'var(--blue-light)', color: 'var(--blue)',
                         }}>
-                          {tutorMode}
+                          {messageMode}
                         </span>
                       )}
                     </div>
@@ -316,7 +364,7 @@ export default function ChatPanel({
                         {msg.content}
                       </p>
                     ) : (
-                      renderMessageContent(msg.content)
+                      renderMessageContent(msg.content, msg.id)
                     )}
 
                     {/* Citations */}
@@ -461,7 +509,7 @@ export default function ChatPanel({
                 width: 8, height: 8, borderRadius: '50%',
                 background: 'var(--blue)',
               }} className="pulse-ring" />
-              Analyzing code & grounding citations...
+              <ResponseTimer />
             </div>
           </div>
         )}

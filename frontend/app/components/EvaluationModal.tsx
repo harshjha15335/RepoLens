@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Play,
@@ -33,38 +33,66 @@ export default function EvaluationModal({
   const [evalRun, setEvalRun] = useState<EvaluationRun | null>(null);
   const [activeStrategy, setActiveStrategy] = useState<string>("hybrid_rrf");
   const [error, setError] = useState<string | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRun = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      activeRun.current += 1;
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+    };
+  }, [repositoryId]);
 
   if (!isOpen) return null;
 
   const handleStartEvaluation = async () => {
+    const runToken = ++activeRun.current;
+    if (pollTimer.current) clearTimeout(pollTimer.current);
     setError(null);
     setRunning(true);
+    setEvalRun(null);
     try {
       const run = await api.runEvaluation({
         repositoryId,
         strategies: ["bm25", "dense", "hybrid_rrf", "graph_expansion"],
       });
+      if (activeRun.current !== runToken) return;
       setEvalRun(run);
 
-      // Poll until completed
-      const pollInterval = setInterval(async () => {
+      const startedAt = Date.now();
+      const poll = async () => {
+        if (activeRun.current !== runToken) return;
+        if (Date.now() - startedAt > 120_000) {
+          setRunning(false);
+          setError("Evaluation has not finished after two minutes. Check the backend log; the job may still be running.");
+          return;
+        }
         try {
           const updated = await api.getEvaluation(run.id);
+          if (activeRun.current !== runToken) return;
           setEvalRun(updated);
           if (updated.status === "completed" || updated.status === "failed") {
-            clearInterval(pollInterval);
             setRunning(false);
+            if (updated.status === "failed") {
+              setError(updated.error_message || "Evaluation failed. Check the backend log for details.");
+            }
             if (updated.metrics && updated.metrics.length > 0) {
               setActiveStrategy(updated.metrics[0].strategy);
             }
+            return;
           }
         } catch (e) {
-          clearInterval(pollInterval);
+          if (activeRun.current !== runToken) return;
           setRunning(false);
+          setError(e instanceof Error ? e.message : "Could not check evaluation status");
+          return;
         }
-      }, 1500);
-    } catch (err: any) {
-      setError(err.message || "Failed to start evaluation");
+        pollTimer.current = setTimeout(poll, 1500);
+      };
+      pollTimer.current = setTimeout(poll, 1500);
+    } catch (err: unknown) {
+      if (activeRun.current !== runToken) return;
+      setError(err instanceof Error ? err.message : "Failed to start evaluation");
       setRunning(false);
     }
   };
@@ -133,13 +161,12 @@ export default function EvaluationModal({
               <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
                 RAG Retrieval Evaluation Benchmarks
               </h3>
-              <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: "2px 0 0" }}>
-                Measure Recall@5, Recall@10, MRR & Latency against ground-truth codebase datasets
-              </p>
             </div>
           </div>
 
           <button
+            type="button"
+            aria-label="Close evaluation"
             onClick={onClose}
             style={{
               background: "none",
@@ -168,10 +195,6 @@ export default function EvaluationModal({
             justifyContent: "space-between",
           }}
         >
-          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            Evaluate and compare FAISS dense, BM25 lexical, Reciprocal Rank Fusion, and Graph expansion.
-          </div>
-
           <button
             onClick={handleStartEvaluation}
             disabled={running}
@@ -231,6 +254,11 @@ export default function EvaluationModal({
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {/* Benchmark Table */}
+              {running && (
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                  Evaluating each retrieval strategy. Results will appear when the run finishes.
+                </div>
+              )}
               <div
                 style={{
                   borderRadius: 12,

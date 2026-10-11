@@ -1,6 +1,3 @@
-const puppeteer = require('puppeteer-core');
-const path = require('path');
-const fs = require('fs');
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const ARTIFACT_DIR = 'C:\\Users\\ranja\\.gemini\\antigravity-ide\\brain\\11977ce9-721a-45ee-88dd-eb7cb28870f5';
@@ -10,6 +7,9 @@ async function sleep(ms) {
 }
 
 async function run() {
+  const { default: puppeteer } = await import('puppeteer-core');
+  const { default: path } = await import('node:path');
+  const { default: fs } = await import('node:fs');
   console.log('=== Starting Targeted Feature Audit ===');
   const browser = await puppeteer.launch({
     executablePath: EDGE_PATH,

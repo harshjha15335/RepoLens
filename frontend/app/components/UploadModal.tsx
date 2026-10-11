@@ -46,8 +46,8 @@ export default function UploadModal({
     try {
       await onUploadZip(file);
       onClose();
-    } catch (err: any) {
-      setError(err.message || "Failed to upload ZIP repository");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to upload ZIP repository");
     } finally {
       setLoading(false);
     }
@@ -61,8 +61,8 @@ export default function UploadModal({
     try {
       await onImportGit(gitUrl.trim(), branch.trim() || undefined);
       onClose();
-    } catch (err: any) {
-      setError(err.message || "Failed to import Git repository");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to import Git repository");
     } finally {
       setLoading(false);
     }
@@ -129,12 +129,11 @@ export default function UploadModal({
               <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
                 Import Repository
               </h3>
-              <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: "2px 0 0" }}>
-                Index source code for AST-aware retrieval and AI tutoring
-              </p>
             </div>
           </div>
           <button
+            type="button"
+            aria-label="Close repository import"
             onClick={onClose}
             style={{
               background: "none",
@@ -167,7 +166,7 @@ export default function UploadModal({
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setTab(id as any)}
+              onClick={() => setTab(id as "zip" | "git" | "sample")}
               style={{
                 flex: 1,
                 padding: "6px 8px",
@@ -346,9 +345,6 @@ export default function UploadModal({
                 <h4 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px" }}>
                   Sample Python Calculator Codebase
                 </h4>
-                <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
-                  Includes basic arithmetic, scientific calculator, expression parser, and unit tests with AST symbol structures.
-                </p>
               </div>
 
               <button

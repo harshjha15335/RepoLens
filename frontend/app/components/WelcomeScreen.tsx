@@ -18,7 +18,6 @@ export default function WelcomeScreen({ loading, error, sampleLoading, onRetry, 
         <div className="welcome-brand"><Code2 size={22} aria-hidden="true" /> CodeMentor-RAG</div>
         <span className="welcome-eyebrow">YOUR CODEBASE, EXPLAINED</span>
         <h1 id="welcome-title">Find the code.<br />Understand the why.</h1>
-        <p className="welcome-description">Explore files, follow connections, and ask questions with answers linked to the source.</p>
         {loading ? (
           <p className="welcome-feedback" role="status"><RefreshCw size={16} className="spinner" /> Loading your repositories…</p>
         ) : error ? (
@@ -39,9 +38,9 @@ export default function WelcomeScreen({ loading, error, sampleLoading, onRetry, 
           </>
         )}
         <div className="welcome-features">
-          <div><FileSearch size={20} /><strong>Explore the source</strong><span>Files and symbols in one workspace.</span></div>
-          <div><Network size={20} /><strong>See how it connects</strong><span>Navigate dependencies and call flows.</span></div>
-          <div><MessageSquare size={20} /><strong>Ask with context</strong><span>Follow citations back to the code.</span></div>
+          <div><FileSearch size={20} /><strong>Explore the source</strong></div>
+          <div><Network size={20} /><strong>See how it connects</strong></div>
+          <div><MessageSquare size={20} /><strong>Ask with context</strong></div>
         </div>
       </section>
     </main>

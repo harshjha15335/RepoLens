@@ -4,7 +4,7 @@ import json
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 from app.core.config import get_settings
 from app.core.errors import GenerationProviderError
@@ -92,7 +92,8 @@ IMPORTANT RULES:
 
 CONTEXT_TEMPLATE = """## Repository Evidence
 
-The following code chunks were retrieved from the repository to answer the question.
+The selected code, when present, is the primary evidence for the question.
+Other code chunks were retrieved from the repository for related context.
 Use ONLY this evidence to form your answer. Cite sources with [file_path:line_start-line_end].
 
 {context_blocks}
@@ -103,7 +104,7 @@ Use ONLY this evidence to form your answer. Cite sources with [file_path:line_st
 ## Question
 {question}
 
-Please provide a thorough answer based on the repository evidence above. Include citations."""
+Answer directly using the repository evidence above. Include citations."""
 
 
 class LLMProvider(ABC):
@@ -135,7 +136,7 @@ class OllamaProvider(LLMProvider):
         import httpx
 
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=3.0)) as client:
                 response = await client.post(
                     f"{self.base_url}/api/chat",
                     json={
@@ -288,6 +289,7 @@ class GenerationService:
         question: str,
         tutor_mode: str = "developer",
         conversation_history: list[dict] | None = None,
+        code_context: dict | None = None,
     ) -> dict:
         """Generate a grounded answer with citations.
 
@@ -307,18 +309,24 @@ class GenerationService:
             strategy="hybrid",
         )
         retrieved_chunks = retrieval_result.get("chunks", [])
+        evidence_chunks = ([code_context] if code_context else []) + retrieved_chunks
 
         # Step 2: Build context with token budget
         context_blocks = self._build_context(
-            retrieved_chunks,
+            evidence_chunks,
             budget=self.settings.context_token_budget,
         )
 
         # Step 3: Build messages
         system_prompt = SYSTEM_PROMPTS.get(tutor_mode, SYSTEM_PROMPTS["developer"])
+        word_limit = max(20, min(200, self.settings.generation_max_tokens // 3))
+        system_prompt += (
+            f"\nKeep the complete answer within {word_limit} words, including citations. "
+            "Finish your explanation within that limit rather than repeating the code."
+        )
 
         history_text = ""
-        if conversation_history:
+        if conversation_history and not code_context:
             recent = conversation_history[-6:]  # Last 3 exchanges
             history_text = "\n".join(
                 f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content'][:300]}"
@@ -329,6 +337,22 @@ class GenerationService:
             context_blocks=context_blocks,
             history_text=history_text or "(No previous conversation)",
             question=question,
+        )
+        if code_context:
+            action_instructions = {
+                "explain": "Explain what these selected lines do and why their state or return values matter.",
+                "debug": "Check for defects in these selected lines. If none is supported by the source, say that; distinguish possible risks from verified bugs.",
+                "trace": "Trace execution in these selected lines as a short ordered sequence. Name calls shown in the selected source; if there are no calls, explicitly say so. Do not replace the trace with a general explanation.",
+            }
+            user_content += (
+                "\nAnswer the question about the Selected code section first. "
+                "Cite the exact source lines that support each claim."
+            )
+            user_content += "\n" + action_instructions.get(code_context.get("action"), "")
+
+        user_content += (
+            f"\nRespond in at most {word_limit} words, including citations. "
+            "Do not repeat the source in a code block. Complete every sentence."
         )
 
         messages = [
@@ -343,14 +367,16 @@ class GenerationService:
                 messages,
                 max_tokens=self.settings.generation_max_tokens,
             )
+            if not answer or not answer.strip():
+                raise GenerationProviderError("The generation provider returned an empty answer")
         except Exception as e:
             logger.warning(f"LLM provider error ({e}), using grounded offline synthesis fallback.")
-            answer = self._offline_grounded_synthesis(question, tutor_mode, retrieved_chunks)
+            answer = self._offline_grounded_synthesis(question, tutor_mode, evidence_chunks)
 
         gen_latency_ms = (time.time() - gen_start) * 1000
 
         # Step 5: Extract and validate citations
-        citations = self._extract_citations(answer, retrieved_chunks)
+        citations = self._extract_citations(answer, evidence_chunks)
 
         total_latency_ms = (time.time() - start_time) * 1000
 
@@ -361,6 +387,7 @@ class GenerationService:
                 "tutor_mode": tutor_mode,
                 "intent": retrieval_result.get("intent"),
                 "chunks_retrieved": len(retrieved_chunks),
+                "selected_code": bool(code_context),
                 "retrieval_latency_ms": round(retrieval_result.get("latency_ms", 0), 2),
                 "generation_latency_ms": round(gen_latency_ms, 2),
                 "total_latency_ms": round(total_latency_ms, 2),
@@ -389,6 +416,8 @@ class GenerationService:
             start = chunk.get("start_line", "?")
             end = chunk.get("end_line", "?")
             content = chunk.get("content", "")
+            if chunk.get("selected") and isinstance(start, int):
+                content = "\n".join(f"{start + offset} | {line}" for offset, line in enumerate(content.split("\n")))
 
             # Deduplicate
             range_key = (file_path, start, end)
@@ -397,7 +426,7 @@ class GenerationService:
             seen_ranges.add(range_key)
 
             # Check budget
-            header = f"\n### {file_path}"
+            header = f"\n### {'Selected code: ' if chunk.get('selected') else ''}{file_path}"
             if symbol:
                 header += f" — {symbol}"
             header += f" (lines {start}–{end})"
@@ -405,6 +434,11 @@ class GenerationService:
             block = f"{header}\n```\n{content}\n```\n"
 
             if used_chars + len(block) > char_budget:
+                if chunk.get("selected"):
+                    # The exact selection takes precedence over the retrieval budget.
+                    context_parts.append(block)
+                    used_chars += len(block)
+                    continue
                 # Try to fit a truncated version
                 remaining = char_budget - used_chars - len(header) - 20
                 if remaining > 200:
@@ -421,62 +455,32 @@ class GenerationService:
     def _offline_grounded_synthesis(
         self, question: str, tutor_mode: str, retrieved_chunks: list[dict]
     ) -> str:
-        """Synthesize a grounded answer using retrieved code chunks when external LLM is offline."""
+        """Show relevant evidence without inferring behavior when the LLM is unavailable."""
         if not retrieved_chunks:
             return "I could not find sufficient repository evidence to answer your question."
-
-        top_chunk = retrieved_chunks[0]
-        file_path = top_chunk.get("file_path", "")
-        start_line = top_chunk.get("start_line", 1)
-        end_line = top_chunk.get("end_line", start_line)
-        symbol = top_chunk.get("symbol_name") or "the target component"
-        snippet = top_chunk.get("content", "").strip()
-
-        citation_tag = f"[{file_path}:{start_line}-{end_line}]"
-
-        if tutor_mode == "beginner":
-            return (
-                f"Let's break down how this works step-by-step based on the repository code {citation_tag}!\n\n"
-                f"### Core Concept: {symbol}\n"
-                f"In this codebase, `{symbol}` in `{file_path}` serves as a fundamental building block. "
-                f"Think of it like a specialized tool designed to handle calculations and operations reliably.\n\n"
-                f"### Repository Implementation\n"
-                f"Here is the relevant implementation from {citation_tag}:\n"
-                f"```python\n{snippet[:400]}\n```\n\n"
-                f"The code verifies inputs before proceeding and records the operation details into state history."
+        introductions = {
+            "beginner": "Here are the closest source excerpts. Read them from top to bottom to see what the code actually does:",
+            "developer": "Here are the closest implementation excerpts for your question:",
+            "interview": "Use these source excerpts to build an interview answer, citing the behavior you can verify:",
+            "debug": "Start investigating with these source excerpts. Check the conditions and return paths shown here:",
+        }
+        parts = [
+            "The language model is unavailable, so I cannot reliably interpret the full behavior from these excerpts alone.",
+            introductions.get(tutor_mode, introductions["developer"]),
+        ]
+        for chunk in retrieved_chunks[:2]:
+            file_path = chunk.get("file_path", "")
+            start_line = chunk.get("start_line", 1)
+            end_line = chunk.get("end_line", start_line)
+            symbol = chunk.get("symbol_name")
+            snippet = (chunk.get("content") or "").strip()[:700]
+            if not file_path or not snippet:
+                continue
+            label = f"`{symbol}`" if symbol else "Source"
+            parts.append(
+                f"{label} [{file_path}:{start_line}-{end_line}]\n```text\n{snippet}\n```"
             )
-        elif tutor_mode == "interview":
-            return (
-                f"### Technical Interview Analysis for `{symbol}` {citation_tag}\n\n"
-                f"**Architectural Context:**\n"
-                f"In `{file_path}`, `{symbol}` coordinates with the broader module hierarchy. "
-                f"Key discussion points include state isolation, exception propagation, and algorithmic complexity.\n\n"
-                f"**Key Implementation ({citation_tag}):**\n"
-                f"```python\n{snippet[:450]}\n```\n\n"
-                f"**Tradeoffs & Evaluation:**\n"
-                f"- **Strengths:** Clear separation of concerns, explicit error handling.\n"
-                f"- **Considerations:** Ensure boundary inputs (like zero or empty tokens) are tested defensively."
-            )
-        elif tutor_mode == "debug":
-            return (
-                f"### Debug & Control Flow Trace {citation_tag}\n\n"
-                f"**Investigating target:** `{symbol}` in `{file_path}:L{start_line}-{end_line}`.\n\n"
-                f"**Execution Flow Analysis:**\n"
-                f"1. Input parameters enter the function boundary.\n"
-                f"2. Validation checks execute to ensure arguments satisfy invariants (e.g. division by zero raises ValueError).\n"
-                f"3. State mutations or return values are calculated.\n\n"
-                f"**Relevant Source Section ({citation_tag}):**\n"
-                f"```python\n{snippet[:450]}\n```\n\n"
-                f"**Potential failure modes:** Check if boundary values or type mismatches violate expected inputs."
-            )
-        else: # developer
-            return (
-                f"Based on the repository source in `{file_path}` {citation_tag}, here is how `{symbol}` is implemented:\n\n"
-                f"### Implementation Overview\n"
-                f"The logic in {citation_tag} handles execution directly within `{file_path}`.\n\n"
-                f"```python\n{snippet[:500]}\n```\n\n"
-                f"Notice that operations record their invocation into history and validate argument invariants before execution."
-            )
+        return "\n\n".join(parts)
 
     def _extract_citations(
         self, answer: str, retrieved_chunks: list[dict]
@@ -492,7 +496,6 @@ class GenerationService:
         )
 
         for match in citation_pattern.finditer(answer):
-            full = match.group(0)
             file_path = match.group(1).split(":")[0]
             start_line = int(match.group(2)) if match.group(2) else None
             end_line = int(match.group(3)) if match.group(3) else start_line
@@ -500,7 +503,13 @@ class GenerationService:
             # Validate against retrieved chunks
             matching_chunk = None
             for chunk in retrieved_chunks:
-                if chunk.get("file_path", "").endswith(file_path) or file_path in chunk.get("file_path", ""):
+                actual_path = chunk.get("file_path", "").replace("\\", "/")
+                cited_path = file_path.replace("\\", "/")
+                if actual_path == cited_path or actual_path.endswith("/" + cited_path):
+                    if start_line is not None and not (
+                        chunk.get("start_line", 0) <= start_line <= end_line <= chunk.get("end_line", 0)
+                    ):
+                        continue
                     matching_chunk = chunk
                     break
 
@@ -515,25 +524,6 @@ class GenerationService:
                         "start_line": start_line or matching_chunk.get("start_line"),
                         "end_line": end_line or matching_chunk.get("end_line"),
                         "content_preview": matching_chunk.get("content", "")[:200],
-                    })
-
-        # Also add all retrieved chunks as potential citations if few were found
-        if len(citations) < 2:
-            for chunk in retrieved_chunks[:5]:
-                citation_key = (
-                    chunk.get("file_path"),
-                    chunk.get("start_line"),
-                    chunk.get("end_line"),
-                )
-                if citation_key not in seen:
-                    seen.add(citation_key)
-                    citations.append({
-                        "chunk_id": chunk.get("chunk_id"),
-                        "file_path": chunk.get("file_path", ""),
-                        "symbol": chunk.get("symbol_name"),
-                        "start_line": chunk.get("start_line"),
-                        "end_line": chunk.get("end_line"),
-                        "content_preview": chunk.get("content", "")[:200],
                     })
 
         return citations

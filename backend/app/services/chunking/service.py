@@ -1,7 +1,6 @@
 """Structure-aware code chunking service."""
 
 import hashlib
-from typing import Any
 
 from app.core.logging import get_logger
 
@@ -111,8 +110,8 @@ class ChunkingService:
                 }
                 chunks.append(chunk)
 
-            for l in range(start_line, end_line + 1):
-                covered_lines.add(l)
+            for line_number in range(start_line, end_line + 1):
+                covered_lines.add(line_number)
 
         # Capture uncovered code (top-level statements, etc.)
         uncovered = []
@@ -414,7 +413,7 @@ class ChunkingService:
         if symbols:
             overview_parts.append("# Symbols")
             for sym in symbols:
-                prefix = f"  " if sym.get("parent") else ""
+                prefix = "  " if sym.get("parent") else ""
                 overview_parts.append(
                     f"{prefix}{sym.get('type', 'symbol')}: {sym.get('name', 'unknown')}"
                     f" (lines {sym.get('start_line', '?')}-{sym.get('end_line', '?')})"

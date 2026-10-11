@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Code2, FolderTree, MessageSquare } from "lucide-react";
 import Header from "./components/Header";
 import WelcomeScreen from "./components/WelcomeScreen";
 import Sidebar from "./components/Sidebar";
@@ -36,6 +37,12 @@ export default function Home() {
   // Repository state
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [currentRepo, setCurrentRepo] = useState<Repository | null>(null);
+  const currentRepoId = currentRepo?.id;
+  const currentRepoStatus = currentRepo?.status.toLowerCase();
+  const fileRequestVersion = useRef(0);
+  const sessionRequestVersion = useRef(0);
+  const chatRequestVersion = useRef(0);
+  const chatInFlight = useRef(false);
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -48,6 +55,7 @@ export default function Home() {
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [fileContent, setFileContent] = useState<FileContent | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [highlightRange, setHighlightRange] = useState<
     { start: number; end: number; symbol?: string | null } | undefined
   >();
@@ -63,23 +71,11 @@ export default function Home() {
   const [repositoriesLoading, setRepositoriesLoading] = useState(true);
   const [repositoryError, setRepositoryError] = useState<string | null>(null);
   const [sampleLoading, setSampleLoading] = useState(false);
-  const [explorerVisible, setExplorerVisible] = useState(true);
-  const [tutorVisible, setTutorVisible] = useState(true);
   const [mobilePanel, setMobilePanel] = useState("code");
-  const [tutorWidth, setTutorWidth] = useState(340);
-  const [compactWorkspace, setCompactWorkspace] = useState(false);
-
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 1050px)");
-    const update = () => setCompactWorkspace(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
 
   // Diagnostics
   const [chatLoading, setChatLoading] = useState(false);
-  const [isPolling, setIsPolling] = useState(false);
+  const isPolling = currentRepo !== null && !["ready", "failed", "cancelled"].includes(currentRepo.status.toLowerCase());
 
   // Keyboard shortcut listener for Ctrl+K / Cmd+K
   useEffect(() => {
@@ -100,40 +96,47 @@ export default function Home() {
     try {
       const repos = await api.getRepositories();
       setRepositories(repos);
-      if (repos.length > 0 && !currentRepo) {
+      if (repos.length > 0) {
         const readyRepo = repos.find((r) => r.status?.toLowerCase() === "ready") || repos[0];
-        setCurrentRepo(readyRepo);
+        setCurrentRepo((previous) => previous || readyRepo);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       setRepositoryError(e instanceof Error ? e.message : "Check your connection and try again.");
     } finally {
       setRepositoriesLoading(false);
     }
-  }, [currentRepo]);
+  }, []);
 
   useEffect(() => {
-    loadRepositories();
+    const timer = setTimeout(() => { void loadRepositories(); }, 0);
+    return () => clearTimeout(timer);
   }, [loadRepositories]);
 
   // Load repo-specific data
-  const loadRepoData = useCallback(async (repoId: string) => {
+  const loadRepoData = useCallback(async (repoId: string, isCurrent: () => boolean) => {
+    const sessionVersion = ++sessionRequestVersion.current;
     try {
       const [repoFiles, repoSymbols, repoSessions] = await Promise.all([
         api.getFiles(repoId).catch(() => []),
         api.getSymbols(repoId).catch(() => []),
         api.getSessions(repoId).catch(() => []),
       ]);
+      if (!isCurrent()) return;
 
       setFiles(repoFiles);
       setSymbols(repoSymbols);
-      setSessions(repoSessions);
+      if (sessionVersion === sessionRequestVersion.current) setSessions(repoSessions);
 
-      if (repoSessions.length > 0) {
+      if (repoSessions.length > 0 && sessionVersion === sessionRequestVersion.current) {
         const firstSession = repoSessions[0];
         setCurrentSessionId(firstSession.id);
-        const detail = await api.getSession(firstSession.id);
-        setMessages(detail.messages || []);
-      } else {
+        const detail = await api.getSession(firstSession.id).catch((error) => {
+          console.error("Failed to load initial session:", error);
+          return null;
+        });
+        if (!isCurrent()) return;
+        if (sessionVersion === sessionRequestVersion.current) setMessages(detail?.messages || []);
+      } else if (sessionVersion === sessionRequestVersion.current) {
         setCurrentSessionId(undefined);
         setMessages([]);
       }
@@ -142,6 +145,10 @@ export default function Home() {
         const firstPath = repoFiles[0].path;
         setSelectedFilePath(firstPath);
         setOpenTabs([firstPath]);
+      } else {
+        setSelectedFilePath(undefined);
+        setOpenTabs([]);
+        setFileContent(null);
       }
     } catch (e) {
       console.error("Failed to load repo data:", e);
@@ -149,69 +156,71 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (currentRepo && currentRepo.status?.toLowerCase() === "ready") {
-      loadRepoData(currentRepo.id);
+    if (currentRepoId && currentRepoStatus === "ready") {
+      let cancelled = false;
+      const timer = setTimeout(() => { void loadRepoData(currentRepoId, () => !cancelled); }, 0);
+      return () => { cancelled = true; clearTimeout(timer); };
     }
-  }, [currentRepo?.id, currentRepo?.status, loadRepoData]);
+  }, [currentRepoId, currentRepoStatus, loadRepoData]);
 
   // Polling for repo status
   useEffect(() => {
-    const isFinished =
-      !currentRepo ||
-      currentRepo.status?.toLowerCase() === "ready" ||
-      currentRepo.status?.toLowerCase() === "failed";
-    if (isFinished) {
-      setIsPolling(false);
-      return;
-    }
-
-    setIsPolling(true);
+    if (!currentRepoId || !isPolling) return;
+    let cancelled = false;
+    let requestInFlight = false;
     const interval = setInterval(async () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
       try {
-        const updated = await api.getRepositoryStatus(currentRepo.id);
+        const updated = await api.getRepositoryStatus(currentRepoId);
+        if (cancelled) return;
         setCurrentRepo(updated);
         setRepositories((prev) =>
           prev.map((r) => (r.id === updated.id ? updated : r))
         );
 
-        if (updated.status?.toLowerCase() === "ready") {
-          setIsPolling(false);
-          loadRepoData(updated.id);
-        } else if (updated.status?.toLowerCase() === "failed") {
-          setIsPolling(false);
-        }
       } catch (err) {
         console.error("Status polling error:", err);
+      } finally {
+        requestInFlight = false;
       }
     }, 1500);
 
-    return () => clearInterval(interval);
-  }, [currentRepo?.id, currentRepo?.status, loadRepoData]);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [currentRepoId, isPolling]);
 
   // File loading
   const loadFileContent = useCallback(
     async (filePath: string) => {
-      if (!currentRepo) return;
+      if (!currentRepoId) return;
+      const requestVersion = ++fileRequestVersion.current;
       setLoadingFile(true);
+      setFileError(null);
       try {
-        const content = await api.getFileContent(currentRepo.id, filePath);
+        const content = await api.getFileContent(currentRepoId, filePath);
+        if (requestVersion !== fileRequestVersion.current) return;
         setFileContent(content);
         setSelectedFilePath(filePath);
         setOpenTabs((prev) => (prev.includes(filePath) ? prev : [...prev, filePath]));
-      } catch (e: any) {
+      } catch (e: unknown) {
+        if (requestVersion !== fileRequestVersion.current) return;
         console.error("Failed to load file content:", e);
+        setFileContent(null);
+        setFileError(e instanceof Error ? e.message : "Could not load the file.");
       } finally {
-        setLoadingFile(false);
+        if (requestVersion === fileRequestVersion.current) setLoadingFile(false);
       }
     },
-    [currentRepo]
+    [currentRepoId]
   );
 
   useEffect(() => {
-    if (selectedFilePath && currentRepo && currentRepo.status?.toLowerCase() === "ready") {
-      loadFileContent(selectedFilePath);
+    if (selectedFilePath && currentRepoId && currentRepoStatus === "ready") {
+      const requestVersions = fileRequestVersion;
+      const timer = setTimeout(() => { void loadFileContent(selectedFilePath); }, 0);
+      return () => { clearTimeout(timer); requestVersions.current++; };
     }
-  }, [selectedFilePath, currentRepo?.id, currentRepo?.status, loadFileContent]);
+  }, [selectedFilePath, currentRepoId, currentRepoStatus, loadFileContent]);
 
   // File tab management
   const handleSelectTab = (path: string) => {
@@ -227,8 +236,11 @@ export default function Home() {
       if (remaining.length > 0) {
         handleSelectTab(remaining[remaining.length - 1]);
       } else {
+        fileRequestVersion.current++;
+        setLoadingFile(false);
         setSelectedFilePath(undefined);
         setFileContent(null);
+        setFileError(null);
       }
     }
   };
@@ -265,21 +277,22 @@ export default function Home() {
   };
 
   // Code selection context attachment
-  const handleAttachContext = (context: CodeContextAttachment, actionPrompt?: string) => {
+  const handleAttachContext = (context: CodeContextAttachment, actionPrompt?: string, mode?: TutorMode) => {
+    setMobilePanel("tutor");
     setContextAttachment(context);
     if (actionPrompt) {
-      handleSendMessage(actionPrompt, context);
+      return handleSendMessage(actionPrompt, context, mode);
     }
+    return Promise.resolve(true);
   };
 
   // Chat message sending
-  const handleSendMessage = async (question: string, attachedCtx?: CodeContextAttachment) => {
-    if (!currentRepo || currentRepo.status?.toLowerCase() !== "ready") return;
-
-    let finalQuestion = question;
-    if (attachedCtx) {
-      finalQuestion = `[Context: ${attachedCtx.file_path} L${attachedCtx.start_line}-${attachedCtx.end_line}]\n${question}`;
-    }
+  const handleSendMessage = async (question: string, attachedCtx?: CodeContextAttachment, mode?: TutorMode) => {
+    if (chatInFlight.current || !currentRepo || currentRepo.status?.toLowerCase() !== "ready") return false;
+    sessionRequestVersion.current++;
+    const requestVersion = ++chatRequestVersion.current;
+    const repoId = currentRepo.id;
+    chatInFlight.current = true;
 
     const tempUserMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
@@ -292,11 +305,13 @@ export default function Home() {
 
     try {
       const response = await api.sendMessage({
-        repositoryId: currentRepo.id,
-        question: finalQuestion,
-        tutorMode,
+        repositoryId: repoId,
+        question,
+        tutorMode: mode || tutorMode,
         sessionId: currentSessionId,
+        codeContext: attachedCtx,
       });
+      if (requestVersion !== chatRequestVersion.current) return false;
 
       setCurrentSessionId(response.session_id);
 
@@ -312,63 +327,122 @@ export default function Home() {
       setMessages((prev) => [...prev, assistantMsg]);
       setContextAttachment(null);
 
-      const updatedSessions = await api.getSessions(currentRepo.id);
-      setSessions(updatedSessions);
-    } catch (err: any) {
-      alert(err.message || "Failed to get AI response");
+      void api.getSessions(repoId)
+        .then((updatedSessions) => {
+          if (requestVersion === chatRequestVersion.current) setSessions(updatedSessions);
+        })
+        .catch((err) => console.error("Failed to refresh sessions:", err));
+      return true;
+    } catch (err: unknown) {
+      if (requestVersion === chatRequestVersion.current) {
+        setMessages((prev) => prev.filter((message) => message.id !== tempUserMsg.id));
+        alert(err instanceof Error ? err.message : "Failed to get AI response");
+      }
+      return false;
     } finally {
-      setChatLoading(false);
+      if (requestVersion === chatRequestVersion.current) {
+        chatInFlight.current = false;
+        setChatLoading(false);
+      }
     }
   };
 
   // Sessions
   const handleSelectSession = async (sessionId: string) => {
+    const requestVersion = ++sessionRequestVersion.current;
+    chatRequestVersion.current++;
+    chatInFlight.current = false;
+    setChatLoading(false);
     setCurrentSessionId(sessionId);
+    setMessages([]);
     try {
       const detail = await api.getSession(sessionId);
-      setMessages(detail.messages || []);
+      if (requestVersion === sessionRequestVersion.current) setMessages(detail.messages || []);
     } catch (e) {
       console.error("Failed to load session:", e);
+      if (requestVersion === sessionRequestVersion.current) {
+        alert(e instanceof Error ? e.message : "Failed to load session");
+      }
     }
   };
 
   const handleNewSession = async () => {
     if (!currentRepo) return;
+    const repoId = currentRepo.id;
+    const requestVersion = ++sessionRequestVersion.current;
     try {
-      const newSess = await api.createSession(currentRepo.id, tutorMode);
+      const newSess = await api.createSession(repoId, tutorMode);
+      if (requestVersion !== sessionRequestVersion.current) return;
+      chatRequestVersion.current++;
+      chatInFlight.current = false;
+      setChatLoading(false);
       setSessions((prev) => [newSess, ...prev]);
       setCurrentSessionId(newSess.id);
       setMessages([]);
-    } catch (e: any) {
-      alert(e.message || "Failed to create session");
+    } catch (e: unknown) {
+      if (requestVersion === sessionRequestVersion.current) {
+        alert(e instanceof Error ? e.message : "Failed to create session");
+      }
     }
   };
 
   const handleDeleteSession = async (sessionId: string) => {
+    const requestVersion = sessionRequestVersion.current;
     try {
       await api.deleteSession(sessionId);
+      if (requestVersion !== sessionRequestVersion.current) return;
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       if (currentSessionId === sessionId) {
+        sessionRequestVersion.current++;
+        chatRequestVersion.current++;
+        chatInFlight.current = false;
+        setChatLoading(false);
         setCurrentSessionId(undefined);
         setMessages([]);
       }
-    } catch (e: any) {
-      alert(e.message || "Failed to delete session");
+    } catch (e: unknown) {
+      if (requestVersion === sessionRequestVersion.current) {
+        alert(e instanceof Error ? e.message : "Failed to delete session");
+      }
     }
   };
 
   // Repository Operations
+  const activateRepository = (repo: Repository) => {
+    fileRequestVersion.current++;
+    sessionRequestVersion.current++;
+    chatRequestVersion.current++;
+    chatInFlight.current = false;
+    setChatLoading(false);
+    setLoadingFile(false);
+    setCurrentRepo(repo);
+    setFiles([]);
+    setSymbols([]);
+    setSessions([]);
+    setCurrentSessionId(undefined);
+    setMessages([]);
+    setSelectedFilePath(undefined);
+    setOpenTabs([]);
+    setFileContent(null);
+    setFileError(null);
+    setHighlightRange(undefined);
+    setContextAttachment(null);
+    setActiveActivityView("files");
+    setCenterView("code");
+    setMobilePanel("code");
+  };
+
   const handleUploadZip = async (file: File) => {
     const newRepo = await api.uploadRepository(file);
     setRepositories((prev) => [newRepo, ...prev]);
-    setCurrentRepo(newRepo);
+    activateRepository(newRepo);
     return newRepo;
   };
 
   const handleImportGit = async (url: string, branch?: string) => {
     const newRepo = await api.importGit(url, branch);
     setRepositories((prev) => [newRepo, ...prev]);
-    setCurrentRepo(newRepo);
+    activateRepository(newRepo);
     return newRepo;
   };
 
@@ -378,16 +452,26 @@ export default function Home() {
       const remaining = repositories.filter((r) => r.id !== repoId);
       setRepositories(remaining);
       if (currentRepo?.id === repoId) {
-        setCurrentRepo(remaining.length > 0 ? remaining[0] : null);
-        setFiles([]);
-        setSymbols([]);
-        setSessions([]);
-        setMessages([]);
-        setFileContent(null);
-        setOpenTabs([]);
+        if (remaining.length > 0) activateRepository(remaining[0]);
+        else {
+          fileRequestVersion.current++;
+          sessionRequestVersion.current++;
+          chatRequestVersion.current++;
+          chatInFlight.current = false;
+          setChatLoading(false);
+          setCurrentRepo(null);
+          setFiles([]);
+          setSymbols([]);
+          setSessions([]);
+          setCurrentSessionId(undefined);
+          setMessages([]);
+          setSelectedFilePath(undefined);
+          setFileContent(null);
+          setOpenTabs([]);
+        }
       }
-    } catch (e: any) {
-      alert(e.message || "Failed to delete repository");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to delete repository");
     }
   };
 
@@ -397,8 +481,8 @@ export default function Home() {
       const updated = await api.reindexRepository(currentRepo.id);
       setCurrentRepo(updated);
       setRepositories((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-    } catch (e: any) {
-      alert(e.message || "Failed to reindex");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to reindex");
     }
   };
 
@@ -415,8 +499,8 @@ export default function Home() {
       }
       const newRepo = await res.json();
       setRepositories((prev) => [newRepo, ...prev.filter((r) => r.id !== newRepo.id)]);
-      setCurrentRepo(newRepo);
-    } catch (e: any) {
+      activateRepository(newRepo);
+    } catch (e: unknown) {
       setRepositoryError(e instanceof Error ? e.message : "The sample could not be loaded. Try again.");
     } finally {
       setSampleLoading(false);
@@ -424,8 +508,13 @@ export default function Home() {
   };
 
   // Determine what the center panel shows
-  const showGraph = centerView === "graph" || activeActivityView === "graph";
   const showInterview = activeActivityView === "interview";
+  const showGraph = !showInterview && (centerView === "graph" || activeActivityView === "graph");
+  const returnToCode = () => {
+    setActiveActivityView("files");
+    setCenterView("code");
+    setMobilePanel("code");
+  };
 
   // Repository dashboard (no repo selected or no repos)
   if (!currentRepo && repositories.length === 0) {
@@ -470,12 +559,9 @@ export default function Home() {
           repositories={repositories}
           currentRepo={currentRepo}
           onSelectRepo={(repo) => {
-            setCurrentRepo(repo);
-            setHighlightRange(undefined);
+            activateRepository(repo);
           }}
           onOpenUpload={() => setUploadModalOpen(true)}
-          onOpenLab={() => setLabModalOpen(true)}
-          onOpenEvaluation={() => setEvalModalOpen(true)}
           onLoadSample={handleLoadSample}
           onRefresh={loadRepositories}
           onDeleteRepo={handleDeleteRepo}
@@ -483,23 +569,16 @@ export default function Home() {
           isPolling={isPolling}
           tutorMode={tutorMode}
           onTutorModeChange={setTutorMode}
-          centerView={centerView}
-          onCenterViewChange={setCenterView}
-          onOpenSettings={() => setSettingsModalOpen(true)}
-          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         />
 
-        <nav className="workspace-toolbar" aria-label="Workspace panels">
-          <div className="workspace-panel-controls">
-            <button className="workspace-button" aria-pressed={compactWorkspace ? mobilePanel === "explorer" : explorerVisible} onClick={() => { if (!compactWorkspace) setExplorerVisible(!explorerVisible); setMobilePanel("explorer"); }}>Explorer</button>
-            <button className="workspace-button workspace-code-toggle" aria-pressed={mobilePanel === "code"} onClick={() => setMobilePanel("code")}>Code</button>
-            <button className="workspace-button" aria-pressed={compactWorkspace ? mobilePanel === "tutor" : tutorVisible} onClick={() => { if (!compactWorkspace) setTutorVisible(!tutorVisible); setMobilePanel("tutor"); }}>AI tutor</button>
-          </div>
-          <label className="workspace-width-control">Tutor width <input type="range" min="260" max="480" step="20" value={tutorWidth} onChange={(event) => setTutorWidth(Number(event.target.value))} /></label>
-          <span className="workspace-shortcut">Search files & commands <kbd>Ctrl / ⌘ K</kbd></span>
+        <nav className="workspace-mobile-nav" aria-label="Workspace panels">
+          <button aria-label="Files" title="Files" aria-pressed={mobilePanel === "explorer"} onClick={() => setMobilePanel("explorer")}><FolderTree size={18} /></button>
+          <button aria-label="Code" title="Code" aria-pressed={mobilePanel === "code"} onClick={() => setMobilePanel("code")}><Code2 size={18} /></button>
+          <button aria-label="Chat" title="Chat" aria-pressed={mobilePanel === "tutor"} onClick={() => setMobilePanel("tutor")}><MessageSquare size={18} /></button>
         </nav>
         {repositoryError && <div className="workspace-error" role="alert">{repositoryError} <button className="workspace-button" onClick={loadRepositories}>Retry</button></div>}
-        <div className="workspace-panels" data-explorer={explorerVisible} data-tutor={tutorVisible} data-mobile-panel={mobilePanel} style={{ "--tutor-width": `${tutorWidth}px` } as React.CSSProperties}>
+        {fileError && selectedFilePath && <div className="workspace-error" role="alert">{fileError} <button className="workspace-button" onClick={() => loadFileContent(selectedFilePath)}>Retry file</button></div>}
+        <div className="workspace-panels" data-mobile-panel={mobilePanel}>
           {/* Left Panel - Repository Explorer */}
           <div className="workspace-explorer" style={{
             background: 'var(--surface)',
@@ -520,7 +599,9 @@ export default function Home() {
               onSelectFile={(path) => {
                 setSelectedFilePath(path);
                 setHighlightRange(undefined);
+                setActiveActivityView("files");
                 setCenterView("code");
+                setMobilePanel("code");
                 loadFileContent(path);
               }}
               onSelectSymbol={handleSymbolClick}
@@ -548,6 +629,7 @@ export default function Home() {
                 <GraphView
                   repositoryId={currentRepo.id}
                   onInspectNode={handleCitationClick}
+                  onBackToCode={returnToCode}
                 />
               ) : (
                 <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
@@ -560,6 +642,7 @@ export default function Home() {
                   repositoryId={currentRepo.id}
                   repoName={currentRepo.name}
                   onInspectCitation={handleCitationClick}
+                  onBackToCode={returnToCode}
                 />
               ) : (
                 <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
@@ -578,6 +661,7 @@ export default function Home() {
                 onSelectTab={handleSelectTab}
                 onCloseTab={handleCloseTab}
                 onAttachContext={handleAttachContext}
+                chatLoading={chatLoading}
                 fontSize={fontSize}
                 onSendMessage={handleSendMessage}
                 isRepoReady={currentRepo?.status?.toLowerCase() === "ready"}
@@ -609,7 +693,12 @@ export default function Home() {
               onRemoveContext={() => setContextAttachment(null)}
               repoName={currentRepo?.name}
               isRepoReady={currentRepo?.status?.toLowerCase() === "ready"}
-              onOpenInterview={() => setActiveActivityView("interview")}
+              onOpenInterview={() => { setActiveActivityView("interview"); setCenterView("code"); setMobilePanel("code"); }}
+              sessions={sessions}
+              currentSessionId={currentSessionId}
+              onNewSession={handleNewSession}
+              onSelectSession={handleSelectSession}
+              onDeleteSession={handleDeleteSession}
             />
           </div>
         </div>
@@ -629,11 +718,10 @@ export default function Home() {
         }}
         onSelectSymbol={(sym) => handleSymbolClick(sym)}
         onSelectTutorMode={setTutorMode}
-        onNavigateView={(view) => setActiveActivityView(view)}
+        onNavigateView={(view) => { setActiveActivityView(view); setMobilePanel("code"); if (view === "interview") setCenterView("code"); }}
         onOpenUpload={() => setUploadModalOpen(true)}
         onOpenEvaluation={() => setEvalModalOpen(true)}
         onOpenSettings={() => setSettingsModalOpen(true)}
-        onToggleTheme={() => {}}
         onAskQuestion={(q) => handleSendMessage(q)}
       />
 
@@ -647,6 +735,7 @@ export default function Home() {
 
       {currentRepo && (
         <RetrievalLabModal
+          key={`retrieval-${currentRepo.id}`}
           isOpen={labModalOpen}
           onClose={() => setLabModalOpen(false)}
           repositoryId={currentRepo.id}
@@ -656,6 +745,7 @@ export default function Home() {
 
       {currentRepo && (
         <EvaluationModal
+          key={`evaluation-${currentRepo.id}`}
           isOpen={evalModalOpen}
           onClose={() => setEvalModalOpen(false)}
           repositoryId={currentRepo.id}
@@ -665,8 +755,6 @@ export default function Home() {
       <SettingsModal
         isOpen={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
-        theme={"light"}
-        onToggleTheme={() => {}}
         defaultTutorMode={tutorMode}
         onSetDefaultTutorMode={setTutorMode}
         fontSize={fontSize}

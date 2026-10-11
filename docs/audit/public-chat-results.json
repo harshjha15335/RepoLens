@@ -1,0 +1,25 @@
+[
+  {
+    "check": "upload and reindex completed during model generation",
+    "passed": true,
+    "elapsed_seconds": 7.44
+  },
+  {
+    "check": "selected-code debug chat returned grounded answer",
+    "passed": true,
+    "metadata": {
+      "tutor_mode": "debug",
+      "intent": "DEBUGGING",
+      "chunks_retrieved": 10,
+      "selected_code": true,
+      "retrieval_latency_ms": 24.0,
+      "generation_latency_ms": 56326.57,
+      "total_latency_ms": 56351.56
+    },
+    "answer": "The selected lines initialize the `history` and `last_result` attributes in the `Calculator` class. These lines are correct and do not contain any defects [src\\calculator.py:7-9]."
+  },
+  {
+    "check": "successful exchange persisted atomically",
+    "passed": true
+  }
+]

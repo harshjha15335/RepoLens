@@ -2,17 +2,14 @@
 
 import re
 import time
-from typing import Any
 
 import numpy as np
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_session_factory
-from app.core.errors import RetrievalError
 from app.core.logging import get_logger
-from app.models.models import Chunk, GraphNode, GraphEdge
+from app.models.models import Chunk, GraphEdge, GraphNode
 from app.services.embeddings.service import EmbeddingService
 from app.services.indexing.service import IndexingService
 from app.services.reranking.service import RerankingService
@@ -240,7 +237,7 @@ class RetrievalService:
                 retrieved_chunks.append(chunk)
 
         # Step 5: Graph expansion (small-to-big retrieval)
-        if enable_graph_expansion and query_info.get("use_graph", True):
+        if enable_graph_expansion:
             retrieved_chunks = await self._expand_with_graph(
                 repository_id, retrieved_chunks, chunk_list, top_k
             )
@@ -437,8 +434,17 @@ class RetrievalService:
                         existing_ids.add(chunk["chunk_id"])
                         break
 
-        # Interleave: original results first, then expansions
-        result = retrieved_chunks + expansion_chunks
+        # Give a bounded number of connected symbols a slot in the returned
+        # top_k. Appending every expansion after 2 * top_k ranked hits made
+        # graph expansion invisible whenever the base retrieval was full.
+        pivot = max(1, top_k // 2)
+        expansion_budget = max(1, top_k // 3)
+        result = (
+            retrieved_chunks[:pivot]
+            + expansion_chunks[:expansion_budget]
+            + retrieved_chunks[pivot:]
+            + expansion_chunks[expansion_budget:]
+        )
         return result
 
     async def _apply_mmr(

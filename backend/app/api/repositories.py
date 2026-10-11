@@ -1,35 +1,69 @@
 """Repository management API endpoints."""
 
-import os
+import json
+import re
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Depends, BackgroundTasks, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import (
+    IngestionInProgressError,
     RepositoryNotFoundError,
     RepositoryValidationError,
-    IngestionInProgressError,
 )
 from app.core.logging import get_logger
 from app.models.models import (
-    Repository, RepositoryFile, RepositoryStatus, Chunk,
-    GraphNode, GraphEdge,
+    Chunk,
+    GraphEdge,
+    GraphNode,
+    Repository,
+    RepositoryFile,
+    RepositoryStatus,
 )
 from app.schemas.schemas import (
-    RepositoryResponse, RepositoryListResponse, RepositoryStats,
-    GitImportRequest, FileInfo, FileTreeNode, FileContentResponse,
-    SymbolInfo, SymbolListResponse,
+    FileContentResponse,
+    FileInfo,
+    GitImportRequest,
+    RepositoryListResponse,
+    RepositoryResponse,
+    RepositoryStats,
+    SymbolInfo,
+    SymbolListResponse,
 )
 from app.services.ingestion.service import IngestionService
 
 logger = get_logger(__name__)
 router = APIRouter()
+GIT_SOURCE_METADATA_FILE = "source.json"
+_queued_ingestions: set[str] = set()
+
+
+async def _run_queued_ingestion(
+    repository_id: str, source: str, source_type: str, branch: str | None = None
+):
+    """Release the in-process queue guard after the worker finishes."""
+    try:
+        await IngestionService.run_ingestion(repository_id, source, source_type, branch)
+    finally:
+        _queued_ingestions.discard(repository_id)
+
+
+def _queue_ingestion(
+    background_tasks: BackgroundTasks,
+    repository_id: str,
+    source: str,
+    source_type: str,
+    branch: str | None = None,
+):
+    _queued_ingestions.add(repository_id)
+    background_tasks.add_task(_run_queued_ingestion, repository_id, source, source_type, branch)
 
 
 def _repo_to_response(repo: Repository) -> RepositoryResponse:
@@ -102,8 +136,8 @@ async def upload_repository(
     logger.info(f"Repository uploaded: {repo.name} ({repo.id})")
 
     # Start ingestion in background
-    background_tasks.add_task(
-        IngestionService.run_ingestion,
+    _queue_ingestion(
+        background_tasks,
         repo.id,
         str(zip_path),
         "zip",
@@ -125,6 +159,10 @@ async def import_git_repository(
     url = request.url.strip()
     if not url.startswith(("https://", "http://", "git@")):
         raise RepositoryValidationError("Invalid Git URL. Use HTTPS or SSH URL.")
+    if request.branch is not None and (
+        not request.branch.strip() or request.branch.startswith("-")
+    ):
+        raise RepositoryValidationError("Invalid Git branch")
 
     # Extract repo name from URL
     repo_name = url.rstrip("/").split("/")[-1].replace(".git", "")
@@ -142,12 +180,15 @@ async def import_git_repository(
     repo_dir = settings.repos_path / repo.id
     repo_dir.mkdir(parents=True, exist_ok=True)
     repo.storage_path = str(repo_dir)
+    (repo_dir / GIT_SOURCE_METADATA_FILE).write_text(
+        json.dumps({"branch": request.branch}), encoding="utf-8"
+    )
     await db.commit()
 
     logger.info(f"Git repository import started: {repo.name} ({repo.id})")
 
-    background_tasks.add_task(
-        IngestionService.run_ingestion,
+    _queue_ingestion(
+        background_tasks,
         repo.id,
         url,
         "git",
@@ -186,17 +227,23 @@ async def delete_repository(repository_id: str, db: AsyncSession = Depends(get_d
     if not repo:
         raise RepositoryNotFoundError(f"Repository {repository_id} not found")
 
-    # Delete storage
-    if repo.storage_path and os.path.exists(repo.storage_path):
-        shutil.rmtree(repo.storage_path, ignore_errors=True)
-
-    # Delete index files
     settings = get_settings()
-    index_dir = settings.indexes_path / repository_id
-    if index_dir.exists():
-        shutil.rmtree(str(index_dir), ignore_errors=True)
+    storage_dir = Path(repo.storage_path).resolve() if repo.storage_path else None
+    storage_root = settings.repos_path.resolve()
+    if storage_dir and (storage_dir == storage_root or not storage_dir.is_relative_to(storage_root)):
+        raise RepositoryValidationError("Repository storage must be inside application storage")
+    index_root = settings.indexes_path.resolve()
+    index_dir = (index_root / repository_id).resolve()
+    if index_dir == index_root or not index_dir.is_relative_to(index_root):
+        raise RepositoryValidationError("Invalid repository index path")
 
     await db.delete(repo)
+    # Commit before responding so the next request cannot see a deleted record.
+    await db.commit()
+    if storage_dir and storage_dir.exists():
+        shutil.rmtree(storage_dir, ignore_errors=True)
+    if index_dir.exists():
+        shutil.rmtree(index_dir, ignore_errors=True)
     logger.info(f"Repository deleted: {repo.name} ({repo.id})")
 
     return {"message": f"Repository {repository_id} deleted"}
@@ -215,7 +262,7 @@ async def reindex_repository(
     if not repo:
         raise RepositoryNotFoundError(f"Repository {repository_id} not found")
 
-    if repo.status in (
+    if repository_id in _queued_ingestions or repo.status in (
         RepositoryStatus.DISCOVERING,
         RepositoryStatus.PARSING,
         RepositoryStatus.CHUNKING,
@@ -225,23 +272,36 @@ async def reindex_repository(
     ):
         raise IngestionInProgressError("Ingestion is already in progress")
 
-    repo.status = RepositoryStatus.PENDING
-    repo.progress = 0
-    repo.error_message = None
-    repo.progress_message = "Queued for indexing"
-    await db.commit()
-
     source = repo.source_url or str(repo.storage_path)
     source_type = repo.source_type
     if source_type == "zip":
         source = str(Path(repo.storage_path) / "source.zip")
+    branch = None
+    if source_type == "git":
+        metadata_file = Path(repo.storage_path) / GIT_SOURCE_METADATA_FILE
+        if metadata_file.exists():
+            branch = json.loads(metadata_file.read_text(encoding="utf-8")).get("branch")
+        else:
+            # Repositories imported before branch metadata was introduced.
+            head_file = Path(repo.storage_path) / "source" / ".git" / "HEAD"
+            if head_file.exists():
+                head = head_file.read_text(encoding="utf-8").strip()
+                if head.startswith("ref: refs/heads/"):
+                    branch = head.removeprefix("ref: refs/heads/")
 
-    background_tasks.add_task(
-        IngestionService.run_ingestion,
-        repo.id,
-        source,
-        source_type,
-    )
+    # Reserve this worker before yielding at commit. Persisted PENDING records
+    # without a live in-process worker remain retryable after a server restart.
+    _queued_ingestions.add(repository_id)
+    try:
+        repo.status = RepositoryStatus.PENDING
+        repo.progress = 0
+        repo.error_message = None
+        repo.progress_message = "Queued for indexing"
+        await db.commit()
+        _queue_ingestion(background_tasks, repo.id, source, source_type, branch)
+    except Exception:
+        _queued_ingestions.discard(repository_id)
+        raise
 
     return _repo_to_response(repo)
 
@@ -300,18 +360,25 @@ async def get_file_content(
         raise RepositoryValidationError("Repository storage not found")
 
     # Security: validate path doesn't escape repository
-    settings = get_settings()
-    source_dir = os.path.join(repo.storage_path, "source")
-    full_path = os.path.normpath(os.path.join(source_dir, path))
-
-    if not full_path.startswith(os.path.normpath(source_dir)):
+    source_dir = (Path(repo.storage_path) / "source").resolve()
+    full_path = (source_dir / path).resolve()
+    try:
+        full_path.relative_to(source_dir)
+    except ValueError:
         raise RepositoryValidationError("Invalid file path")
 
-    if not os.path.isfile(full_path):
+    result = await db.execute(
+        select(RepositoryFile).where(
+            RepositoryFile.repository_id == repository_id,
+            RepositoryFile.path == path,
+        )
+    )
+    file_record = result.scalar_one_or_none()
+    if not file_record or not full_path.is_file():
         raise RepositoryNotFoundError(f"File not found: {path}")
 
     try:
-        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+        with full_path.open("r", encoding="utf-8", errors="replace") as f:
             content = f.read()
     except Exception as e:
         raise RepositoryValidationError(f"Cannot read file: {str(e)}")
@@ -319,15 +386,6 @@ async def get_file_content(
     lines = content.count("\n") + 1
 
     # Detect language
-    result = await db.execute(
-        select(RepositoryFile)
-        .where(
-            RepositoryFile.repository_id == repository_id,
-            RepositoryFile.path == path,
-        )
-    )
-    file_record = result.scalar_one_or_none()
-
     return FileContentResponse(
         path=path,
         content=content,
@@ -523,24 +581,43 @@ async def generate_interview_questions(
     if not repo:
         raise RepositoryNotFoundError(f"Repository {repository_id} not found")
 
-    difficulty = request.get("difficulty", "intermediate").lower()
-    focus = request.get("focus", "general").lower()
-    count = min(max(int(request.get("count", 5)), 3), 15)
+    difficulty = request.get("difficulty", "intermediate")
+    focus = request.get("focus", "general")
+    count = request.get("count", 5)
+    if difficulty not in {"beginner", "intermediate", "advanced"}:
+        raise RepositoryValidationError("Invalid interview difficulty")
+    if focus not in {"general", "architecture", "backend", "frontend", "algorithms", "data flow"}:
+        raise RepositoryValidationError("Invalid interview focus")
+    if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 15:
+        raise RepositoryValidationError("Interview question count must be between 1 and 15")
 
-    # Fetch symbols and files for repository
+    # Fetch symbols for repository
     sym_res = await db.execute(
         select(Chunk).where(
             Chunk.repository_id == repository_id,
             Chunk.symbol_name.isnot(None),
-        ).limit(30)
+        ).order_by(Chunk.file_path, Chunk.start_line)
     )
-    symbols = sym_res.scalars().all()
-
-    file_res = await db.execute(
-        select(RepositoryFile).where(RepositoryFile.repository_id == repository_id)
-    )
-    files = file_res.scalars().all()
-    file_names = [f.path for f in files]
+    # Large symbols are split into chunks with display suffixes such as
+    # "ExpressionParser (part 1)". Interview questions target real symbols.
+    seen_symbols = set()
+    symbols = []
+    for chunk in sym_res.scalars():
+        name = re.sub(r" \(part \d+\)$", "", chunk.symbol_name)
+        key = (chunk.file_path, chunk.symbol_type, name)
+        if key in seen_symbols:
+            continue
+        seen_symbols.add(key)
+        symbols.append(SimpleNamespace(
+            symbol_name=name,
+            symbol_type=chunk.symbol_type,
+            file_path=chunk.file_path,
+            start_line=chunk.start_line,
+        ))
+    if focus == "backend":
+        symbols = [s for s in symbols if "backend" in s.file_path.lower() or s.file_path.endswith(".py")]
+    elif focus == "frontend":
+        symbols = [s for s in symbols if "frontend" in s.file_path.lower() or s.file_path.endswith((".tsx", ".jsx", ".ts", ".js"))]
 
     # Build grounded repository questions based on discovered architecture
     questions = []
@@ -551,36 +628,49 @@ async def generate_interview_questions(
     if classes:
         main_class = classes[0]
         questions.append({
-            "id": f"int-q-1",
+            "id": "int-q-1",
             "topic": "Architecture & Object Model",
             "difficulty": difficulty,
-            "question": f"Explain the role and responsibilities of the `{main_class.symbol_name}` class in `{main_class.file_path}`. What design patterns does it employ?",
+            "question": f"Explain the role of `{main_class.symbol_name}` in `{main_class.file_path}`. What does its source show about its responsibilities?",
             "target_files": [main_class.file_path],
             "target_symbols": [main_class.symbol_name],
-            "expected_concepts": ["class structure", "state management", "modularity"],
+            "expected_concepts": ["class structure", "source-backed responsibilities"],
         })
 
-    if len(classes) > 1:
-        derived_class = classes[1]
-        questions.append({
-            "id": f"int-q-2",
-            "topic": "Inheritance & Extensibility",
-            "difficulty": difficulty,
-            "question": f"How does `{derived_class.symbol_name}` extend or specialize `{classes[0].symbol_name}`? What methods are added or overridden?",
-            "target_files": [derived_class.file_path, classes[0].file_path],
-            "target_symbols": [derived_class.symbol_name, classes[0].symbol_name],
-            "expected_concepts": ["subclassing", "inheritance hierarchy", "polymorphism"],
-        })
+    inheritance_res = await db.execute(
+        select(GraphEdge).where(
+            GraphEdge.repository_id == repository_id,
+            GraphEdge.relationship_type == "INHERITS",
+        )
+    )
+    inheritance_edges = inheritance_res.scalars().all()
+    if inheritance_edges:
+        edge = inheritance_edges[0]
+        derived_class = await db.get(GraphNode, edge.source_id)
+        base_class = await db.get(GraphNode, edge.target_id)
+        if derived_class and base_class and (
+            focus not in {"backend", "frontend"}
+            or any(s.file_path == derived_class.file_path for s in symbols)
+        ):
+            questions.append({
+                "id": "int-q-2",
+                "topic": "Inheritance & Extensibility",
+                "difficulty": difficulty,
+                "question": f"How does `{derived_class.name}` relate to `{base_class.name}`? Explain the inheritance shown in the source.",
+                "target_files": [derived_class.file_path, base_class.file_path],
+                "target_symbols": [derived_class.name, base_class.name],
+                "expected_concepts": ["inheritance relationship", "class implementation"],
+            })
 
     # Method / algorithmic question
     call_methods = [f for f in functions if f.symbol_name and ("parse" in f.symbol_name.lower() or "token" in f.symbol_name.lower() or "calc" in f.symbol_name.lower() or "eval" in f.symbol_name.lower())]
     if call_methods:
         cm = call_methods[0]
         questions.append({
-            "id": f"int-q-3",
+            "id": "int-q-3",
             "topic": "Algorithms & Parsing",
             "difficulty": difficulty,
-            "question": f"Describe the logic inside `{cm.symbol_name}` ({cm.file_path}:L{cm.start_line}). How are inputs processed or validated?",
+            "question": f"Describe the logic inside `{cm.symbol_name}` ({cm.file_path}:L{cm.start_line}). Which inputs and branches are visible in its implementation?",
             "target_files": [cm.file_path],
             "target_symbols": [cm.symbol_name],
             "expected_concepts": ["input parsing", "validation", "control flow"],
@@ -591,10 +681,10 @@ async def generate_interview_questions(
     if error_methods:
         em = error_methods[0]
         questions.append({
-            "id": f"int-q-4",
+            "id": "int-q-4",
             "topic": "Error Handling & Edge Cases",
             "difficulty": difficulty,
-            "question": f"How does `{em.symbol_name}` in `{em.file_path}` handle edge cases (e.g. invalid arguments or boundary conditions)? Where are exceptions raised?",
+            "question": f"Which edge cases, if any, are handled by `{em.symbol_name}` in `{em.file_path}`? Point to the relevant branches.",
             "target_files": [em.file_path],
             "target_symbols": [em.symbol_name],
             "expected_concepts": ["exception propagation", "defensive programming", "edge conditions"],
@@ -605,10 +695,10 @@ async def generate_interview_questions(
     if history_methods:
         hm = history_methods[0]
         questions.append({
-            "id": f"int-q-5",
+            "id": "int-q-5",
             "topic": "Data Flow & State Tracking",
             "difficulty": difficulty,
-            "question": f"Trace how state or execution history is updated in `{hm.symbol_name}`. Which callers invoke this method, and how is persistence managed?",
+            "question": f"Trace the implementation of `{hm.symbol_name}`. What state, if any, does it change?",
             "target_files": [hm.file_path],
             "target_symbols": [hm.symbol_name],
             "expected_concepts": ["data flow", "mutation", "caller dependencies"],
@@ -616,16 +706,39 @@ async def generate_interview_questions(
 
     # Fallbacks if repository has different symbols
     if len(questions) < count:
-        for idx, sym in enumerate(functions[:count - len(questions)]):
+        used = {(symbol, path) for question in questions for symbol, path in zip(question["target_symbols"], question["target_files"])}
+        candidates = [s for s in symbols if (s.symbol_name, s.file_path) not in used]
+        if focus == "architecture":
+            candidates.sort(key=lambda s: s.symbol_type not in ("class", "interface"))
+        elif focus == "algorithms":
+            candidates.sort(key=lambda s: s.symbol_type not in ("function", "method"))
+        elif focus == "data flow":
+            candidates.sort(key=lambda s: not any(k in s.symbol_name.lower() for k in ("flow", "process", "handle", "load", "save", "update")))
+        for idx, sym in enumerate(candidates[:count - len(questions)]):
             questions.append({
                 "id": f"int-q-extra-{idx}",
                 "topic": "Implementation Details",
                 "difficulty": difficulty,
-                "question": f"Walk through the implementation of `{sym.symbol_name}` in `{sym.file_path}`. What are the key algorithmic considerations?",
+                "question": f"Walk through the implementation of `{sym.symbol_name}` in `{sym.file_path}`. Which behavior can you verify from the source?",
                 "target_files": [sym.file_path],
                 "target_symbols": [sym.symbol_name],
                 "expected_concepts": ["signature", "logic", "efficiency"],
             })
+
+    focus_topics = {
+        "architecture": {"Architecture & Object Model", "Inheritance & Extensibility"},
+        "algorithms": {"Algorithms & Parsing", "Implementation Details"},
+        "data flow": {"Data Flow & State Tracking"},
+    }
+    preferred_topics = focus_topics.get(focus, set())
+    questions.sort(key=lambda item: item["topic"] not in preferred_topics)
+    difficulty_prompt = {
+        "beginner": "Explain in plain language. ",
+        "intermediate": "Use source examples. ",
+        "advanced": "Analyze the relevant branches and tradeoffs shown in the source. ",
+    }[difficulty]
+    for item in questions:
+        item["question"] = difficulty_prompt + item["question"]
 
     return {
         "repository_id": repository_id,
@@ -648,9 +761,16 @@ async def evaluate_interview_answer(
         raise RepositoryNotFoundError(f"Repository {repository_id} not found")
 
     question = request.get("question", "")
-    user_answer = request.get("user_answer", "").strip()
-    target_files = request.get("target_files", [])
+    user_answer = request.get("user_answer", "")
     target_symbols = request.get("target_symbols", [])
+    target_files = request.get("target_files", [])
+    if not isinstance(question, str) or not isinstance(user_answer, str):
+        raise RepositoryValidationError("Question and answer must be text")
+    if not isinstance(target_symbols, list) or any(not isinstance(s, str) for s in target_symbols):
+        raise RepositoryValidationError("Target symbols must be a list of names")
+    if not isinstance(target_files, list) or any(not isinstance(path, str) for path in target_files):
+        raise RepositoryValidationError("Target files must be a list of paths")
+    user_answer = user_answer.strip()
 
     if not user_answer:
         return {
@@ -661,17 +781,32 @@ async def evaluate_interview_answer(
             "citations": [],
         }
 
-    # Retrieve real chunks matching the question and target symbols
-    from app.services.retrieval.service import RetrievalService
-    retrieval = RetrievalService()
-    search_res = await retrieval.search(
-        repository_id=repository_id,
-        query=f"{question} {' '.join(target_symbols)}",
-        top_k=5,
-        strategy="hybrid_rrf",
-    )
-
-    chunks = search_res.get("chunks", [])
+    # Generated questions already identify their source. Prefer that evidence
+    # over generic retrieval, which can rank unrelated import blocks first.
+    chunks = []
+    if target_files:
+        source_query = select(Chunk).where(
+            Chunk.repository_id == repository_id,
+            Chunk.file_path.in_(target_files),
+        ).order_by(Chunk.chunk_index)
+        source_chunks = (await db.execute(source_query)).scalars().all()
+        if target_symbols:
+            source_chunks = [chunk for chunk in source_chunks if
+                re.sub(r"\s*\(part \d+\)$", "", chunk.symbol_name or "") in target_symbols]
+        chunks = [{
+            "file_path": chunk.file_path, "start_line": chunk.start_line,
+            "end_line": chunk.end_line, "symbol_name": chunk.symbol_name,
+            "content": chunk.content,
+        } for chunk in source_chunks]
+    if not chunks:
+        from app.services.retrieval.service import RetrievalService
+        search_res = await RetrievalService().search(
+            repository_id=repository_id,
+            query=f"{question} {' '.join(target_symbols)}",
+            top_k=5,
+            strategy="hybrid_rrf",
+        )
+        chunks = search_res.get("chunks", [])
     citations = [
         {
             "file_path": c["file_path"],
@@ -683,36 +818,35 @@ async def evaluate_interview_answer(
         for c in chunks[:3]
     ]
 
-    # Evaluate answer content against code symbols
+    # This is an evidence overlap check, not a semantic correctness judgment.
+    evidence_tokens = {
+        token.lower()
+        for chunk in chunks
+        for token in re.findall(r"[A-Za-z_]\w{3,}", chunk.get("content", ""))
+        if token.lower() not in {"self", "return", "true", "false", "none", "class", "function", "const"}
+    }
+    answer_tokens = {token.lower() for token in re.findall(r"[A-Za-z_]\w{3,}", user_answer)}
+    matching_tokens = sorted(answer_tokens & evidence_tokens)
     mentioned_symbols = [s for s in target_symbols if s.lower() in user_answer.lower()]
-    score = 65  # Base passing threshold for substantive answer
-    if len(user_answer) > 80:
-        score += 15
-    if mentioned_symbols:
-        score += 15
-    score = min(score, 98)
+    score = min(75, len(matching_tokens) * 10) + (25 if mentioned_symbols else 0)
+    if not chunks:
+        score = 0
 
-    correct_points = []
-    if mentioned_symbols:
-        correct_points.append(f"Correctly identified key symbols: {', '.join(mentioned_symbols)}.")
-    if len(user_answer) > 40:
-        correct_points.append("Provided structured reasoning outlining the operational flow.")
-
-    missing_points = []
-    unmentioned = [s for s in target_symbols if s not in mentioned_symbols]
-    if unmentioned:
-        missing_points.append(f"Consider referencing related component `{unmentioned[0]}`.")
-    if "exception" in question.lower() or "error" in question.lower():
-        if "valueerror" not in user_answer.lower() and "exception" not in user_answer.lower():
-            missing_points.append("Specify exact exception types raised (e.g. ValueError) on invalid inputs.")
-    if not missing_points:
-        missing_points.append("Could elaborate further on performance complexity and architectural tradeoffs.")
+    if matching_tokens:
+        correct = f"Your answer uses terms found in the retrieved source: {', '.join(matching_tokens[:6])}."
+    else:
+        correct = "I could not match your explanation to the retrieved source."
+    missing = "Compare your claims with the cited code. This automated check cannot verify whether your reasoning is correct."
+    explanation = "Relevant source excerpts: " + "; ".join(
+        f"{c['file_path']}:L{c['start_line']}-{c['end_line']} — {c['snippet']}"
+        for c in citations
+    ) if citations else "No relevant indexed source was retrieved for this question."
 
     return {
         "score": score,
-        "what_was_correct": " ".join(correct_points) if correct_points else "Identified general concepts related to the module.",
-        "what_was_missing": " ".join(missing_points),
-        "grounded_explanation": f"In the repository implementation ({', '.join(target_files) if target_files else 'source code'}), the component coordinates with {target_symbols[0] if target_symbols else 'related methods'} to handle execution and validation.",
+        "what_was_correct": correct,
+        "what_was_missing": missing,
+        "grounded_explanation": explanation,
         "citations": citations,
     }
 

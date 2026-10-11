@@ -2,6 +2,7 @@
 
 import io
 import zipfile
+
 import pytest
 from fastapi import BackgroundTasks, UploadFile
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.api import repositories
 from app.core.config import Settings
 from app.core.database import Base
+from app.core.errors import IngestionInProgressError
 from app.models.models import Repository, RepositoryStatus
 from app.schemas.schemas import GitImportRequest
 
@@ -79,4 +81,41 @@ async def test_indexer_sees_committed_repository_before_request_finishes(tmp_pat
             assert repo.status == RepositoryStatus.DISCOVERING
             assert repo.progress == 5
     finally:
+        await engine.dispose()
+
+
+async def test_pending_reindex_blocks_live_worker_but_allows_orphaned_retry(tmp_path, monkeypatch):
+    settings = Settings(data_dir=str(tmp_path / "data"))
+    monkeypatch.setattr(repositories, "get_settings", lambda: settings)
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async def indexer(repository_id, source, source_type, branch=None):
+        assert repository_id == repo.id
+
+    monkeypatch.setattr(repositories.IngestionService, "run_ingestion", indexer)
+    try:
+        async with factory() as db:
+            repo = Repository(name="queued", source_type="zip", status=RepositoryStatus.PENDING)
+            storage = settings.repos_path / "queued"
+            storage.mkdir(parents=True)
+            (storage / "source.zip").write_bytes(b"archive placeholder")
+            repo.storage_path = str(storage)
+            db.add(repo)
+            await db.commit()
+            # This PENDING row has no worker in the current process, so it can recover.
+            tasks = BackgroundTasks()
+            await repositories.reindex_repository(repo.id, background_tasks=tasks, db=db)
+            duplicate_tasks = BackgroundTasks()
+            with pytest.raises(IngestionInProgressError):
+                await repositories.reindex_repository(repo.id, background_tasks=duplicate_tasks, db=db)
+            assert duplicate_tasks.tasks == []
+            await db.refresh(repo)
+            assert repo.status == RepositoryStatus.PENDING
+            await tasks()
+            assert repo.id not in repositories._queued_ingestions
+    finally:
+        repositories._queued_ingestions.clear()
         await engine.dispose()

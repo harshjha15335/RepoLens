@@ -4,12 +4,10 @@ import asyncio
 import hashlib
 import os
 import shutil
-import subprocess
-import time
 import zipfile
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -17,14 +15,18 @@ from app.core.database import get_session_factory
 from app.core.errors import ArchiveSecurityError, RepositoryValidationError
 from app.core.logging import get_logger
 from app.models.models import (
-    Repository, RepositoryFile, RepositoryStatus, Chunk,
-    GraphNode, GraphEdge,
+    Chunk,
+    GraphEdge,
+    GraphNode,
+    Repository,
+    RepositoryFile,
+    RepositoryStatus,
 )
-from app.services.parsing.service import ParserService
 from app.services.chunking.service import ChunkingService
-from app.services.graph.service import GraphService
 from app.services.embeddings.service import EmbeddingService
+from app.services.graph.service import GraphService
 from app.services.indexing.service import IndexingService
+from app.services.parsing.service import ParserService
 
 logger = get_logger(__name__)
 
@@ -234,7 +236,7 @@ class IngestionService:
 
                 # Update FAISS index mappings in DB
                 chunk_records = (await db.execute(
-                    select(Chunk).where(Chunk.repository_id == repository_id)
+                    select(Chunk).where(Chunk.repository_id == repository_id).order_by(Chunk.chunk_index)
                 )).scalars().all()
 
                 for i, chunk_record in enumerate(chunk_records):
@@ -356,28 +358,42 @@ class IngestionService:
 
     @staticmethod
     async def _clone_git(url: str, target_dir: Path, branch: str | None, settings):
-        """Clone a Git repository safely."""
+        """Clone or refresh the application-owned checkout on its selected branch."""
+        target_dir = target_dir.resolve()
+        if not target_dir.is_relative_to(settings.repos_path.resolve()):
+            raise RepositoryValidationError("Git checkout must be inside repository storage")
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        cmd = ["git", "clone", "--depth", "1"]
-        if branch:
-            cmd.extend(["--branch", branch])
-        cmd.extend([url, str(target_dir)])
-
-        try:
+        async def run_git(*args: str) -> str:
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
+                "git", *args,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                raise RepositoryValidationError("Git operation timed out (300s limit)")
             if proc.returncode != 0:
                 raise RepositoryValidationError(
-                    f"Git clone failed: {stderr.decode()[:300]}"
+                    f"Git operation failed: {stderr.decode(errors='replace')[:300]}"
                 )
-        except asyncio.TimeoutError:
-            raise RepositoryValidationError("Git clone timed out (300s limit)")
+            return stdout.decode(errors="replace").strip()
+
+        if (target_dir / ".git").is_dir():
+            selected_branch = branch or await run_git(
+                "-C", str(target_dir), "symbolic-ref", "--short", "HEAD"
+            )
+            await run_git("-C", str(target_dir), "fetch", "--depth", "1", "--", "origin", selected_branch)
+            await run_git("-C", str(target_dir), "checkout", "-B", selected_branch, "FETCH_HEAD")
+            await run_git("-C", str(target_dir), "reset", "--hard", "FETCH_HEAD")
+        else:
+            args = ["clone", "--depth", "1"]
+            if branch:
+                args.extend(["--branch", branch])
+            await run_git(*args, "--", url, str(target_dir))
 
     @staticmethod
     def _discover_files(source_dir: Path, settings) -> list[Path]:
@@ -445,7 +461,11 @@ class IngestionService:
         files: list[Path],
         source_dir: Path,
     ):
-        """Save file records to database."""
+        """Replace file and chunk records for this repository before reindexing."""
+        # Chunks reference files. Delete both in the same transaction as the
+        # replacement file rows so a retry cannot accumulate duplicate paths.
+        await db.execute(delete(Chunk).where(Chunk.repository_id == repo.id))
+        await db.execute(delete(RepositoryFile).where(RepositoryFile.repository_id == repo.id))
         for file_path in files:
             rel_path = str(file_path.relative_to(source_dir))
             content_hash = None

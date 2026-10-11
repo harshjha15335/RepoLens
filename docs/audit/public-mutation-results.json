@@ -1,0 +1,96 @@
+[
+  {
+    "check": "ZIP upload accepted",
+    "passed": true,
+    "detail": "disposable-audit-1791747370724212200"
+  },
+  {
+    "check": "indexing completed",
+    "passed": true,
+    "detail": {
+      "id": "898c96e9-2c4a-4558-bae8-6878c24b6e31",
+      "name": "disposable-audit-1791747370724212200",
+      "source_type": "zip",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python",
+        "typescript"
+      ],
+      "stats": {
+        "files": 3,
+        "chunks": 5,
+        "symbols": 5,
+        "graph_nodes": 6,
+        "graph_edges": 3
+      },
+      "created_at": "2026-10-11T19:36:10.927769",
+      "updated_at": "2026-10-11T19:36:11.186281",
+      "indexed_at": "2026-10-11T19:36:11.185770"
+    }
+  },
+  {
+    "check": "all three source files indexed",
+    "passed": true,
+    "detail": [
+      "README.md",
+      "audit_math.py",
+      "greeting.ts"
+    ]
+  },
+  {
+    "check": "new repository retrieval",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "ZIP reindex queued",
+    "passed": true,
+    "detail": null
+  },
+  {
+    "check": "indexing completed",
+    "passed": true,
+    "detail": {
+      "id": "898c96e9-2c4a-4558-bae8-6878c24b6e31",
+      "name": "disposable-audit-1791747370724212200",
+      "source_type": "zip",
+      "status": "READY",
+      "progress": 100,
+      "progress_message": "Repository indexed successfully",
+      "error_message": null,
+      "languages": [
+        "python",
+        "typescript"
+      ],
+      "stats": {
+        "files": 3,
+        "chunks": 5,
+        "symbols": 5,
+        "graph_nodes": 6,
+        "graph_edges": 3
+      },
+      "created_at": "2026-10-11T19:36:10.927769",
+      "updated_at": "2026-10-11T19:36:12.890160",
+      "indexed_at": "2026-10-11T19:36:12.889150"
+    }
+  },
+  {
+    "check": "reindex preserves unique file/chunk counts",
+    "passed": true,
+    "detail": {
+      "files": 3,
+      "chunks": 5,
+      "symbols": 5,
+      "graph_nodes": 6,
+      "graph_edges": 3
+    }
+  },
+  {
+    "check": "disposable repository deleted",
+    "passed": true,
+    "detail": null
+  }
+]

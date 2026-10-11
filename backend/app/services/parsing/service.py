@@ -3,7 +3,6 @@
 import hashlib
 import re
 from pathlib import Path
-from typing import Any
 
 from app.core.logging import get_logger
 
@@ -11,13 +10,13 @@ logger = get_logger(__name__)
 
 # Try importing tree-sitter
 try:
-    import tree_sitter_python
-    import tree_sitter_javascript
-    import tree_sitter_typescript
-    import tree_sitter_java
     import tree_sitter_c
     import tree_sitter_cpp
     import tree_sitter_go
+    import tree_sitter_java
+    import tree_sitter_javascript
+    import tree_sitter_python
+    import tree_sitter_typescript
     from tree_sitter import Language, Parser
 
     TREE_SITTER_AVAILABLE = True
@@ -28,6 +27,7 @@ try:
         "python": tree_sitter_python,
         "javascript": tree_sitter_javascript,
         "typescript": tree_sitter_typescript,
+        "tsx": tree_sitter_typescript,
         "java": tree_sitter_java,
         "c": tree_sitter_c,
         "cpp": tree_sitter_cpp,
@@ -36,7 +36,13 @@ try:
 
     for lang_name, module in LANGUAGE_MODULES.items():
         try:
-            LANGUAGES[lang_name] = Language(module.language())
+            if lang_name == "typescript":
+                language = module.language_typescript()
+            elif lang_name == "tsx":
+                language = module.language_tsx()
+            else:
+                language = module.language()
+            LANGUAGES[lang_name] = Language(language)
         except Exception as e:
             logger.warning(f"Failed to load tree-sitter language {lang_name}: {e}")
 
@@ -102,6 +108,7 @@ SYMBOL_QUERIES = {
         "import": ["import_declaration"],
     },
 }
+SYMBOL_QUERIES["tsx"] = SYMBOL_QUERIES["typescript"]
 
 
 class ParserService:
@@ -138,8 +145,9 @@ class ParserService:
                 "exports": [],
             }
 
-            if language and TREE_SITTER_AVAILABLE and language in LANGUAGES:
-                self._parse_with_tree_sitter(content, language, result)
+            parser_language = "tsx" if file_path.suffix.lower() == ".tsx" else language
+            if parser_language and TREE_SITTER_AVAILABLE and parser_language in LANGUAGES:
+                self._parse_with_tree_sitter(content, parser_language, result)
             elif language in ("python", "javascript", "typescript"):
                 self._parse_with_regex(content, language, result)
             else:
