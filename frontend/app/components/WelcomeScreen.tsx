@@ -6,12 +6,14 @@ interface WelcomeScreenProps {
   loading: boolean;
   error: string | null;
   sampleLoading: boolean;
+  canOpenIDE: boolean;
   onRetry: () => void;
   onImport: () => void;
   onLoadSample: () => void;
+  onOpenIDE: () => void;
 }
 
-export default function WelcomeScreen({ loading, error, sampleLoading, onRetry, onImport, onLoadSample }: WelcomeScreenProps) {
+export default function WelcomeScreen({ loading, error, sampleLoading, canOpenIDE, onRetry, onImport, onLoadSample, onOpenIDE }: WelcomeScreenProps) {
   return (
     <main className="welcome-screen">
       <section className="welcome-card" aria-labelledby="welcome-title">
@@ -29,6 +31,7 @@ export default function WelcomeScreen({ loading, error, sampleLoading, onRetry, 
         ) : (
           <>
             <div className="welcome-actions">
+              {canOpenIDE && <button className="welcome-primary" onClick={onOpenIDE}>Open IDE <Code2 size={16} aria-hidden="true" /></button>}
               <button className="welcome-primary" onClick={onImport}>Import a repository <ArrowUpRight size={16} aria-hidden="true" /></button>
               <button className="welcome-secondary" onClick={onLoadSample} disabled={sampleLoading}>
                 {sampleLoading ? <><RefreshCw size={15} className="spinner" /> Preparing demo…</> : "Try the calculator demo"}

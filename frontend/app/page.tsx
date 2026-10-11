@@ -96,10 +96,6 @@ export default function Home() {
     try {
       const repos = await api.getRepositories();
       setRepositories(repos);
-      if (repos.length > 0) {
-        const readyRepo = repos.find((r) => r.status?.toLowerCase() === "ready") || repos[0];
-        setCurrentRepo((previous) => previous || readyRepo);
-      }
     } catch (e: unknown) {
       setRepositoryError(e instanceof Error ? e.message : "Check your connection and try again.");
     } finally {
@@ -516,17 +512,22 @@ export default function Home() {
     setMobilePanel("code");
   };
 
-  // Repository dashboard (no repo selected or no repos)
-  if (!currentRepo && repositories.length === 0) {
+  // Keep the welcome screen as the home view until the user opens a repository.
+  if (!currentRepo) {
     return (
       <>
         <WelcomeScreen
           loading={repositoriesLoading}
           error={repositoryError}
           sampleLoading={sampleLoading}
+          canOpenIDE={repositories.length > 0}
           onRetry={loadRepositories}
           onImport={() => setUploadModalOpen(true)}
           onLoadSample={handleLoadSample}
+          onOpenIDE={() => {
+            const readyRepo = repositories.find((repo) => repo.status?.toLowerCase() === "ready");
+            activateRepository(readyRepo || repositories[0]);
+          }}
         />
         <UploadModal
           isOpen={uploadModalOpen}
