@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 660" width="100%" height="100%" style="background:#ffffff; font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <linearGradient id="archHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="layerClient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#eff6ff"/>
+      <stop offset="100%" stop-color="#dbeafe"/>
+    </linearGradient>
+    <linearGradient id="layerApi" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f5f3ff"/>
+      <stop offset="100%" stop-color="#ede9fe"/>
+    </linearGradient>
+    <linearGradient id="layerRag" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ecfdf5"/>
+      <stop offset="100%" stop-color="#d1fae5"/>
+    </linearGradient>
+    <linearGradient id="layerStorage" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fffbeb"/>
+      <stop offset="100%" stop-color="#fef3c7"/>
+    </linearGradient>
+    <filter id="shadowArch" x="-2%" y="-2%" width="104%" height="106%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.07"/>
+    </filter>
+    <marker id="arrowArch" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#334155"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <!-- Banner -->
+  <rect x="30" y="15" width="1040" height="48" rx="8" fill="url(#archHeader)"/>
+  <text x="550" y="46" fill="#ffffff" font-size="17" font-weight="700" text-anchor="middle" letter-spacing="0.5">
+    CODEMENTOR-RAG: FULL END-TO-END SYSTEM &amp; RETRIEVAL ARCHITECTURE
+  </text>
+
+  <!-- LAYER 1: CLIENT TIER (NEXT.JS 16) -->
+  <g transform="translate(30, 80)">
+    <rect width="1040" height="110" rx="8" fill="url(#layerClient)" stroke="#3b82f6" stroke-width="1.6" filter="url(#shadowArch)"/>
+    <text x="25" y="28" fill="#1d4ed8" font-size="12" font-weight="800" letter-spacing="0.5">PRESENTATION TIER — NEXT.JS 16 (REACT 19 / TURBOPACK / VANILLA CSS)</text>
+    
+    <!-- Client Components -->
+    <g transform="translate(25, 40)">
+      <!-- Box 1 -->
+      <rect x="0" y="0" width="180" height="55" rx="6" fill="#ffffff" stroke="#bfdbfe" stroke-width="1.2"/>
+      <text x="90" y="24" fill="#1e40af" font-size="12" font-weight="700" text-anchor="middle">Workspace Explorer</text>
+      <text x="90" y="42" fill="#64748b" font-size="10" text-anchor="middle">File Tree, Symbol Browser</text>
+
+      <!-- Box 2 -->
+      <rect x="200" y="0" width="190" height="55" rx="6" fill="#ffffff" stroke="#bfdbfe" stroke-width="1.2"/>
+      <text x="295" y="24" fill="#1e40af" font-size="12" font-weight="700" text-anchor="middle">Interactive Code Viewer</text>
+      <text x="295" y="42" fill="#64748b" font-size="10" text-anchor="middle">Line Highlighting, Citations</text>
+
+      <!-- Box 3 -->
+      <rect x="410" y="0" width="185" height="55" rx="6" fill="#ffffff" stroke="#bfdbfe" stroke-width="1.2"/>
+      <text x="502" y="24" fill="#1e40af" font-size="12" font-weight="700" text-anchor="middle">Multi-Persona AI Tutor</text>
+      <text x="502" y="42" fill="#64748b" font-size="10" text-anchor="middle">Dev, Beginner, Interview, Debug</text>
+
+      <!-- Box 4 -->
+      <rect x="615" y="0" width="185" height="55" rx="6" fill="#ffffff" stroke="#bfdbfe" stroke-width="1.2"/>
+      <text x="707" y="24" fill="#1e40af" font-size="12" font-weight="700" text-anchor="middle">Code Knowledge Graph</text>
+      <text x="707" y="42" fill="#64748b" font-size="10" text-anchor="middle">Canvas Nodes, Call Flows</text>
+
+      <!-- Box 5 -->
+      <rect x="820" y="0" width="170" height="55" rx="6" fill="#ffffff" stroke="#bfdbfe" stroke-width="1.2"/>
+      <text x="905" y="24" fill="#1e40af" font-size="12" font-weight="700" text-anchor="middle">Retrieval Lab &amp; Eval</text>
+      <text x="905" y="42" fill="#64748b" font-size="10" text-anchor="middle">Strategy A/B, Metrics Inspector</text>
+    </g>
+  </g>
+
+  <!-- Connectors Layer 1 to Layer 2 -->
+  <line x1="550" y1="190" x2="550" y2="215" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <text x="560" y="206" fill="#2563eb" font-size="10" font-weight="700">REST API / JSON / SSE Streams</text>
+
+  <!-- LAYER 2: APPLICATION & API TIER (FASTAPI) -->
+  <g transform="translate(30, 220)">
+    <rect width="1040" height="110" rx="8" fill="url(#layerApi)" stroke="#7c3aed" stroke-width="1.6" filter="url(#shadowArch)"/>
+    <text x="25" y="28" fill="#6d28d9" font-size="12" font-weight="800" letter-spacing="0.5">APPLICATION BACKEND TIER — FASTAPI &amp; PYTHON 3.12 (ASYNCHRONOUS UVICORN)</text>
+
+    <g transform="translate(25, 40)">
+      <rect x="0" y="0" width="185" height="55" rx="6" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+      <text x="92" y="24" fill="#5b21b6" font-size="11.5" font-weight="700" text-anchor="middle">Repository Ingestion API</text>
+      <text x="92" y="42" fill="#64748b" font-size="10" text-anchor="middle">Clone, Unzip, Security Sandbox</text>
+
+      <rect x="205" y="0" width="185" height="55" rx="6" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+      <text x="297" y="24" fill="#5b21b6" font-size="11.5" font-weight="700" text-anchor="middle">AST Parsing &amp; Symbol Table</text>
+      <text x="297" y="42" fill="#64748b" font-size="10" text-anchor="middle">Python `ast` &amp; Docstring Parser</text>
+
+      <rect x="410" y="0" width="190" height="55" rx="6" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+      <text x="505" y="24" fill="#5b21b6" font-size="11.5" font-weight="700" text-anchor="middle">Chat &amp; Tutoring Service</text>
+      <text x="505" y="42" fill="#64748b" font-size="10" text-anchor="middle">Persona Prompting &amp; Citations</text>
+
+      <rect x="620" y="0" width="180" height="55" rx="6" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+      <text x="710" y="24" fill="#5b21b6" font-size="11.5" font-weight="700" text-anchor="middle">Interview Evaluation Engine</text>
+      <text x="710" y="42" fill="#64748b" font-size="10" text-anchor="middle">Scenario Gen &amp; Rubric Scoring</text>
+
+      <rect x="820" y="0" width="170" height="55" rx="6" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+      <text x="905" y="24" fill="#5b21b6" font-size="11.5" font-weight="700" text-anchor="middle">Offline Benchmark Suite</text>
+      <text x="905" y="42" fill="#64748b" font-size="10" text-anchor="middle">Recall@K, MRR, NDCG Evaluator</text>
+    </g>
+  </g>
+
+  <!-- Connectors Layer 2 to Layer 3 -->
+  <line x1="550" y1="330" x2="550" y2="355" stroke="#334155" stroke-width="2.5" marker-end="url(#arrowArch)"/>
+  <text x="560" y="346" fill="#334155" font-size="10" font-weight="700">Internal Service Calls</text>
+
+  <!-- LAYER 3: INTELLIGENCE & HYBRID RETRIEVAL PIPELINE -->
+  <g transform="translate(30, 360)">
+    <rect width="1040" height="135" rx="8" fill="url(#layerRag)" stroke="#059669" stroke-width="1.6" filter="url(#shadowArch)"/>
+    <text x="25" y="26" fill="#047857" font-size="12" font-weight="800" letter-spacing="0.5">CORE RAG &amp; KNOWLEDGE ENGINE — HYBRID RETRIEVAL, GRAPH REASONING &amp; LLM</text>
+
+    <!-- Sub-boxes -->
+    <g transform="translate(25, 38)">
+      <!-- Dense -->
+      <rect x="0" y="0" width="180" height="82" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.2"/>
+      <text x="90" y="22" fill="#065f46" font-size="11.5" font-weight="700" text-anchor="middle">Dense Embedding</text>
+      <text x="90" y="39" fill="#475569" font-size="10" text-anchor="middle">SentenceTransformers</text>
+      <text x="90" y="53" fill="#475569" font-size="10" text-anchor="middle">all-MiniLM-L6-v2 (384-d)</text>
+      <text x="90" y="69" fill="#059669" font-size="9.5" font-weight="600" text-anchor="middle">FAISS Inner Product (L2)</text>
+
+      <!-- Lexical -->
+      <rect x="195" y="0" width="180" height="82" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.2"/>
+      <text x="285" y="22" fill="#065f46" font-size="11.5" font-weight="700" text-anchor="middle">Lexical BM25 Search</text>
+      <text x="285" y="39" fill="#475569" font-size="10" text-anchor="middle">Rank-BM25 Okapi Algorithm</text>
+      <text x="285" y="53" fill="#475569" font-size="10" text-anchor="middle">k1=1.5, b=0.75 Tuning</text>
+      <text x="285" y="69" fill="#059669" font-size="9.5" font-weight="600" text-anchor="middle">Exact Identifier Match</text>
+
+      <!-- Fusion & MMR -->
+      <rect x="390" y="0" width="220" height="82" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.2"/>
+      <text x="500" y="22" fill="#065f46" font-size="11.5" font-weight="700" text-anchor="middle">Reciprocal Rank Fusion (RRF)</text>
+      <text x="500" y="39" fill="#475569" font-size="10" text-anchor="middle">RRF(d) = Σ [ 1 / (60 + rank_i) ]</text>
+      <text x="500" y="55" fill="#475569" font-size="10" text-anchor="middle">Maximal Marginal Relevance (MMR)</text>
+      <text x="500" y="70" fill="#059669" font-size="9.5" font-weight="600" text-anchor="middle">Redundancy Penalty (λ=0.7)</text>
+
+      <!-- Graph -->
+      <rect x="625" y="0" width="190" height="82" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.2"/>
+      <text x="720" y="22" fill="#065f46" font-size="11.5" font-weight="700" text-anchor="middle">Code Graph Traversal</text>
+      <text x="720" y="39" fill="#475569" font-size="10" text-anchor="middle">NetworkX MultiDiGraph</text>
+      <text x="720" y="53" fill="#475569" font-size="10" text-anchor="middle">1-Hop Caller / Callee Expansion</text>
+      <text x="720" y="69" fill="#059669" font-size="9.5" font-weight="600" text-anchor="middle">Context Window Enrichment</text>
+
+      <!-- LLM Integration -->
+      <rect x="830" y="0" width="160" height="82" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.2"/>
+      <text x="910" y="22" fill="#065f46" font-size="11.5" font-weight="700" text-anchor="middle">Generative Model</text>
+      <text x="910" y="39" fill="#475569" font-size="10" text-anchor="middle">Gemini 2.5 / OpenAI /</text>
+      <text x="910" y="53" fill="#475569" font-size="10" text-anchor="middle">Groq Llama 3 / Ollama</text>
+      <text x="910" y="69" fill="#059669" font-size="9.5" font-weight="600" text-anchor="middle">Grounded Fact Citations</text>
+    </g>
+  </g>
+
+  <!-- Connectors Layer 3 to Layer 4 -->
+  <line x1="550" y1="495" x2="550" y2="520" stroke="#334155" stroke-width="2.5" marker-end="url(#arrowArch)"/>
+  <text x="560" y="511" fill="#334155" font-size="10" font-weight="700">Data Persistence &amp; Cache</text>
+
+  <!-- LAYER 4: STORAGE & PERSISTENCE TIER -->
+  <g transform="translate(30, 525)">
+    <rect width="1040" height="110" rx="8" fill="url(#layerStorage)" stroke="#d97706" stroke-width="1.6" filter="url(#shadowArch)"/>
+    <text x="25" y="28" fill="#b45309" font-size="12" font-weight="800" letter-spacing="0.5">DATA STORAGE &amp; PERSISTENCE TIER</text>
+
+    <g transform="translate(25, 40)">
+      <rect x="0" y="0" width="225" height="55" rx="6" fill="#ffffff" stroke="#fde68a" stroke-width="1.2"/>
+      <text x="112" y="24" fill="#92400e" font-size="11.5" font-weight="700" text-anchor="middle">FAISS Vector Index Flat</text>
+      <text x="112" y="42" fill="#64748b" font-size="10" text-anchor="middle">Memory binary index (.index)</text>
+
+      <rect x="250" y="0" width="235" height="55" rx="6" fill="#ffffff" stroke="#fde68a" stroke-width="1.2"/>
+      <text x="367" y="24" fill="#92400e" font-size="11.5" font-weight="700" text-anchor="middle">SQLite Relational Database</text>
+      <text x="367" y="42" fill="#64748b" font-size="10" text-anchor="middle">repositories, code_chunks, chat_messages</text>
+
+      <rect x="510" y="0" width="240" height="55" rx="6" fill="#ffffff" stroke="#fde68a" stroke-width="1.2"/>
+      <text x="630" y="24" fill="#92400e" font-size="11.5" font-weight="700" text-anchor="middle">Serialized Graph Topology</text>
+      <text x="630" y="42" fill="#64748b" font-size="10" text-anchor="middle">Adjacency JSON / Call Tree Maps</text>
+
+      <rect x="775" y="0" width="215" height="55" rx="6" fill="#ffffff" stroke="#fde68a" stroke-width="1.2"/>
+      <text x="882" y="24" fill="#92400e" font-size="11.5" font-weight="700" text-anchor="middle">Local Code Storage</text>
+      <text x="882" y="42" fill="#64748b" font-size="10" text-anchor="middle">Cloned source files &amp; file manifest</text>
+    </g>
+  </g>
+</svg>
