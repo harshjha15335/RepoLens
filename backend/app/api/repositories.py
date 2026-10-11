@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Depends, BackgroundTasks, Query
@@ -94,7 +95,9 @@ async def upload_repository(
     zip_path.write_bytes(content)
 
     repo.storage_path = str(repo_dir)
-    await db.flush()
+    # Background tasks can run before the request dependency commits. Their
+    # separate sessions must be able to read this record and its storage path.
+    await db.commit()
 
     logger.info(f"Repository uploaded: {repo.name} ({repo.id})")
 
@@ -139,7 +142,7 @@ async def import_git_repository(
     repo_dir = settings.repos_path / repo.id
     repo_dir.mkdir(parents=True, exist_ok=True)
     repo.storage_path = str(repo_dir)
-    await db.flush()
+    await db.commit()
 
     logger.info(f"Git repository import started: {repo.name} ({repo.id})")
 
@@ -225,10 +228,13 @@ async def reindex_repository(
     repo.status = RepositoryStatus.PENDING
     repo.progress = 0
     repo.error_message = None
-    await db.flush()
+    repo.progress_message = "Queued for indexing"
+    await db.commit()
 
     source = repo.source_url or str(repo.storage_path)
     source_type = repo.source_type
+    if source_type == "zip":
+        source = str(Path(repo.storage_path) / "source.zip")
 
     background_tasks.add_task(
         IngestionService.run_ingestion,
