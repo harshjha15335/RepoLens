@@ -27,12 +27,15 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let errorDetail = "An unexpected error occurred";
+    // A response stream can only be read once, even if JSON parsing fails.
+    const body = await response.text();
+    let errorDetail = body;
     try {
-      const errJson = await response.json();
-      errorDetail = errJson.error || errJson.detail || JSON.stringify(errJson);
+      const errJson = JSON.parse(body);
+      const detail = errJson?.error || errJson?.detail || errJson || "";
+      errorDetail = typeof detail === "string" ? detail : JSON.stringify(detail);
     } catch {
-      errorDetail = await response.text();
+      // Preserve non-JSON errors returned by the backend or its proxy.
     }
     throw new Error(errorDetail || `HTTP error ${response.status}`);
   }
