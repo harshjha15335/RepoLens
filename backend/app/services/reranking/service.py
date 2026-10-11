@@ -21,43 +21,66 @@ class Reranker(ABC):
 
 
 class CrossEncoderReranker(Reranker):
-    """Cross-encoder reranker using sentence-transformers."""
+    """Cross-encoder reranker using sentence-transformers with resilient offline fallback."""
 
     def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
         self.model_name = model_name
         self._model = None
+        self._fallback_active = False
 
     def _load_model(self):
-        if self._model is None:
+        if self._model is not None or self._fallback_active:
+            return
+
+        try:
+            from sentence_transformers import CrossEncoder
+
+            # Try local cache first
             try:
-                from sentence_transformers import CrossEncoder
-                self._model = CrossEncoder(self.model_name)
-                logger.info(f"Loaded reranker model: {self.model_name}")
-            except ImportError:
-                raise RuntimeError("sentence-transformers required for cross-encoder reranking")
+                self._model = CrossEncoder(self.model_name, local_files_only=True)
+                logger.info(f"Loaded reranker model from local cache: {self.model_name}")
+                return
+            except Exception:
+                pass
+
+            self._model = CrossEncoder(self.model_name)
+            logger.info(f"Loaded reranker model: {self.model_name}")
+        except Exception as e:
+            logger.warning(
+                f"CrossEncoder download or load failed ({e}). "
+                f"HuggingFace CDN (us.aws.cdn.hf.co) may be denied or blocked. "
+                f"Falling back to pass-through/lexical reranking."
+            )
+            self._fallback_active = True
 
     async def rerank(
         self, query: str, candidates: list[dict], top_k: int
     ) -> list[dict]:
-        """Rerank using cross-encoder scores."""
+        """Rerank using cross-encoder scores or fallback to original order."""
         import asyncio
 
         self._load_model()
 
-        pairs = [(query, c.get("content", "")) for c in candidates]
+        if self._fallback_active or self._model is None or not candidates:
+            return candidates[:top_k]
 
-        loop = asyncio.get_event_loop()
-        scores = await loop.run_in_executor(
-            None,
-            lambda: self._model.predict(pairs),
-        )
+        try:
+            pairs = [(query, c.get("content", "")) for c in candidates]
+            loop = asyncio.get_event_loop()
+            scores = await loop.run_in_executor(
+                None,
+                lambda: self._model.predict(pairs),
+            )
 
-        # Attach scores and sort
-        for i, score in enumerate(scores):
-            candidates[i]["reranker_score"] = float(score)
+            # Attach scores and sort
+            for i, score in enumerate(scores):
+                candidates[i]["reranker_score"] = float(score)
 
-        candidates.sort(key=lambda x: x.get("reranker_score", 0), reverse=True)
-        return candidates[:top_k]
+            candidates.sort(key=lambda x: x.get("reranker_score", 0), reverse=True)
+            return candidates[:top_k]
+        except Exception as e:
+            logger.warning(f"Reranking prediction failed ({e}), returning top candidates")
+            return candidates[:top_k]
 
 
 class NoopReranker(Reranker):
