@@ -73,7 +73,9 @@ async def test_reindex_twice_replaces_files_chunks_and_graph(tmp_path, monkeypat
                 files = (await db.execute(
                     select(RepositoryFile.path).where(RepositoryFile.repository_id == repository_id)
                 )).scalars().all()
-                assert sorted(files) == ["README.md", "src\\calculator.py"]
+                assert sorted(path.replace("\\", "/") for path in files) == [
+                    "README.md", "src/calculator.py",
+                ]
                 assert counts[0] == repo.file_count == 2
                 assert counts[1] == repo.chunk_count
                 assert counts[2] == repo.graph_node_count
