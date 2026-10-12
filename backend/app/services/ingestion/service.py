@@ -2,10 +2,14 @@
 
 import asyncio
 import hashlib
+import ipaddress
 import os
+import re
 import shutil
+import socket
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +33,51 @@ from app.services.indexing.service import IndexingService
 from app.services.parsing.service import ParserService
 
 logger = get_logger(__name__)
+GIT_HOSTS = frozenset({"github.com", "gitlab.com", "bitbucket.org"})
+GIT_SECURITY_CONFIG = (
+    "protocol.allow=never", "protocol.https.allow=always", "http.followRedirects=false",
+    "credential.helper=", "core.hooksPath=" + os.devnull, "submodule.recurse=false",
+    "http.proxy=", "http.extraHeader=", "http.sslVerify=true",
+)
+
+
+async def validate_git_url(url: str) -> str:
+    """Accept canonical public HTTPS repository URLs before invoking Git.
+
+    DNS is checked again by the worker. Git performs its own connection lookup,
+    so deployment egress controls remain necessary against DNS rebinding.
+    """
+    url = url.strip()
+    try:
+        parsed = urlsplit(url)
+        valid = (
+            all(32 < ord(char) < 127 for char in url)
+            and parsed.scheme == "https" and parsed.hostname in GIT_HOSTS
+            and parsed.netloc == parsed.hostname and not parsed.query and not parsed.fragment
+            and re.fullmatch(r"/[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*", parsed.path)
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise RepositoryValidationError(
+            "Use a canonical HTTPS owner/repository URL on github.com, gitlab.com, or bitbucket.org"
+        )
+    if parsed.path.rsplit("/", 1)[-1].removesuffix(".git") in ("", ".", ".."):
+        raise RepositoryValidationError("Invalid Git repository path")
+    try:
+        addresses = await asyncio.wait_for(
+            asyncio.to_thread(socket.getaddrinfo, parsed.hostname, 443, type=socket.SOCK_STREAM),
+            timeout=10,
+        )
+        if not addresses or any(
+            not ipaddress.ip_address(address[4][0]).is_global
+            or ipaddress.ip_address(address[4][0]).is_multicast
+            for address in addresses
+        ):
+            raise RepositoryValidationError("Git host must resolve only to public addresses")
+    except (OSError, ValueError, asyncio.TimeoutError) as exc:
+        raise RepositoryValidationError("Cannot resolve Git host to public addresses") from exc
+    return url
 
 # File extensions to process
 SUPPORTED_EXTENSIONS = {
@@ -232,6 +281,7 @@ class IngestionService:
                     repository_id=repository_id,
                     chunks=all_chunks,
                     embeddings=embeddings,
+                    embedding_metadata=embedding_service.metadata,
                 )
 
                 # Update FAISS index mappings in DB
@@ -310,7 +360,7 @@ class IngestionService:
 
                 # Normalize and check for traversal
                 resolved = (target_dir / info.filename).resolve()
-                if not str(resolved).startswith(str(target_dir.resolve())):
+                if not resolved.is_relative_to(target_dir.resolve()):
                     raise ArchiveSecurityError(
                         f"Path traversal detected: {info.filename}"
                     )
@@ -362,11 +412,26 @@ class IngestionService:
         target_dir = target_dir.resolve()
         if not target_dir.is_relative_to(settings.repos_path.resolve()):
             raise RepositoryValidationError("Git checkout must be inside repository storage")
+        url = await validate_git_url(url)
+        if branch is not None and (not branch.strip() or branch.startswith("-") or "\x00" in branch):
+            raise RepositoryValidationError("Invalid Git branch")
         target_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ignore inherited Git configuration and prevent helpers/protocols from
+        # expanding a validated URL into a different transport or destination.
+        git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        git_env.update({
+            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "https",
+        })
+        for key in tuple(git_env):
+            if key.lower() in {"http_proxy", "https_proxy", "all_proxy"}:
+                git_env.pop(key)
+        config_args = [arg for setting in GIT_SECURITY_CONFIG for arg in ("-c", setting)]
 
         async def run_git(*args: str) -> str:
             proc = await asyncio.create_subprocess_exec(
-                "git", *args,
+                "git", *config_args, *args, env=git_env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -386,11 +451,11 @@ class IngestionService:
             selected_branch = branch or await run_git(
                 "-C", str(target_dir), "symbolic-ref", "--short", "HEAD"
             )
-            await run_git("-C", str(target_dir), "fetch", "--depth", "1", "--", "origin", selected_branch)
+            await run_git("-C", str(target_dir), "fetch", "--depth", "1", "--", url, selected_branch)
             await run_git("-C", str(target_dir), "checkout", "-B", selected_branch, "FETCH_HEAD")
             await run_git("-C", str(target_dir), "reset", "--hard", "FETCH_HEAD")
         else:
-            args = ["clone", "--depth", "1"]
+            args = ["clone", "--depth", "1", "--no-recurse-submodules"]
             if branch:
                 args.extend(["--branch", branch])
             await run_git(*args, "--", url, str(target_dir))
@@ -399,6 +464,7 @@ class IngestionService:
     def _discover_files(source_dir: Path, settings) -> list[Path]:
         """Discover processable files in the repository."""
         files = []
+        source_root = source_dir.resolve()
 
         for root, dirs, filenames in os.walk(source_dir):
             # Filter excluded directories in-place
@@ -407,6 +473,8 @@ class IngestionService:
                 if d.lower() not in EXCLUDED_DIRS
                 and not d.startswith(".")
                 and not d.endswith(".egg-info")
+                and not (Path(root) / d).is_symlink()
+                and (Path(root) / d).resolve().is_relative_to(source_root)
             ]
 
             for filename in filenames:
@@ -444,13 +512,15 @@ class IngestionService:
                 # Verify it's not a symlink escaping the repo
                 try:
                     resolved = file_path.resolve()
-                    if not str(resolved).startswith(str(source_dir.resolve())):
+                    if not resolved.is_relative_to(source_root):
                         logger.warning(f"Symlink escape detected: {rel_path}")
                         continue
                 except (OSError, ValueError):
                     continue
 
                 files.append(file_path)
+                if len(files) > settings.max_repository_files:
+                    raise RepositoryValidationError("Repository contains too many processable files")
 
         return sorted(files)
 

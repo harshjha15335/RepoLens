@@ -4,20 +4,13 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   Network,
   Search,
-  Filter,
-  Layers,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   FileCode,
   ArrowRight,
   ArrowLeft,
   Boxes,
-  Cpu,
-  GitFork,
-  ExternalLink,
   RefreshCw,
-  Sliders,
 } from "lucide-react";
 import { GraphResponse, GraphNodeData, CallFlowItem, Citation } from "../types";
 import { api } from "../lib/api";

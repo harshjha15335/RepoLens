@@ -5,11 +5,9 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  FileCode,
   Network,
   Cpu,
   ShieldCheck,
-  Code2,
 } from "lucide-react";
 import { Repository } from "../types";
 

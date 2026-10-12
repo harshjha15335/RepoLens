@@ -146,7 +146,7 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     question: str = Field(..., min_length=1, max_length=2000)
     tutor_mode: TutorMode = TutorMode.DEVELOPER
-    stream: bool = False
+    stream: Literal[False] = False
     code_context: CodeContext | None = None
 
 

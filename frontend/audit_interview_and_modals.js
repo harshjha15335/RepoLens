@@ -1,6 +1,6 @@
 
-const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const ARTIFACT_DIR = 'C:\\Users\\ranja\\.gemini\\antigravity-ide\\brain\\11977ce9-721a-45ee-88dd-eb7cb28870f5';
+const EDGE_PATH = process.env.BROWSER_EXECUTABLE_PATH;
+const ARTIFACT_DIR = process.env.AUDIT_ARTIFACT_DIR || 'artifacts/browser-audit';
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -10,6 +10,10 @@ async function run() {
   const { default: puppeteer } = await import('puppeteer-core');
   const { default: path } = await import('node:path');
   const { default: fs } = await import('node:fs');
+  if (!EDGE_PATH) {
+    throw new Error('Set BROWSER_EXECUTABLE_PATH to a local browser executable before running this source audit.');
+  }
+  fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
   console.log('=== Starting Targeted Feature Audit ===');
   const browser = await puppeteer.launch({
     executablePath: EDGE_PATH,

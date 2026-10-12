@@ -32,11 +32,13 @@ async def run_evaluation(
     if repo.status != RepositoryStatus.READY:
         raise EvaluationError("Repository must be in READY state for evaluation")
 
+    dataset_path = str(EvaluationService.resolve_dataset_path(request.dataset_path))
+
     eval_run = EvaluationRun(
         repository_id=request.repository_id,
         strategy=",".join(request.strategies),
         config={
-            "dataset_path": request.dataset_path,
+            "dataset_path": dataset_path,
             "strategies": request.strategies,
         },
     )
@@ -50,7 +52,7 @@ async def run_evaluation(
         eval_run.id,
         request.repository_id,
         request.strategies,
-        request.dataset_path,
+        dataset_path,
     )
 
     return EvaluationResponse(

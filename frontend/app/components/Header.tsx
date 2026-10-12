@@ -4,16 +4,9 @@ import React, { useState } from "react";
 import {
   Upload,
   ChevronDown,
-  Code2,
   CheckCircle2,
-  AlertCircle,
-  Clock,
   RefreshCw,
   Trash2,
-  Layers,
-  Settings,
-  Command,
-  Search,
 } from "lucide-react";
 import { Repository, TutorMode } from "../types";
 
@@ -29,6 +22,7 @@ interface HeaderProps {
   isPolling: boolean;
   tutorMode: TutorMode;
   onTutorModeChange: (mode: TutorMode) => void;
+  onSignOut?: () => void | Promise<void>;
 }
 
 const TUTOR_MODES: { id: TutorMode; label: string }[] = [
@@ -50,6 +44,7 @@ export default function Header({
   isPolling,
   tutorMode,
   onTutorModeChange,
+  onSignOut,
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -75,6 +70,7 @@ export default function Header({
     }}>
       {/* Left: Breadcrumb Navigation */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {onSignOut && <button type="button" onClick={() => void onSignOut()} style={{ padding: '6px 10px', borderRadius: 'var(--radius-button)', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', cursor: 'pointer' }}>Sign out</button>}
         {/* Brand Mark */}
         <div style={{
           width: 28, height: 28, borderRadius: 8,

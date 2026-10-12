@@ -1,100 +1,89 @@
 # RepoLens deployment
 
-The application requires a Next.js server, a Python API, persistent repository
-storage, and a generation provider. Publishing the frontend alone does not
-publish indexing or chat. A temporary public tunnel is running from the Windows
-checkout; the application has not been moved to a remote hosting server.
+RepoLens runs as one shared owner workspace. Every browser user who knows the
+owner key can access the same repositories and chat sessions. There are no
+per-user accounts or data isolation boundaries. Keep public deployments behind
+access controls appropriate for this shared data model.
 
-## Temporary public demo (12 October 2026)
+## Configure owner access
 
-URL: https://computers-welfare-anytime-stem.trycloudflare.com
+Set `REPOLENS_ACCESS_KEY` to a random secret with at least 32 characters. The
+backend refuses to start without it.
 
-The user authorized unrestricted public access. Website HTTP 200, proxied API
-health, and repository readiness were checked through this URL. The tunnel uses
-Cloudflare Quick Tunnels and forwards to the existing frontend on port 3000;
-the frontend proxies API requests to the backend on port 8000. Local Ollama
-generation still runs on the PC and retains its CPU performance limits.
+- For local development, put the key in `backend/.env`; settings load `.env`
+  relative to the backend working directory.
+- For Docker Compose, put the key in a root `.env` file or export it in the
+  environment before running Compose. Compose requires the variable.
 
-The frontend now serves an optimized production build. This remains a temporary
-public demo hosted on the PC. The PC must remain awake with its
-internet connection, backend, frontend and tunnel running. Stopping the tunnel
-removes public access. Restarting it creates a new hostname. No cloud hosting
-account or domain was created. Anyone with the URL can access the shared app.
+The browser UI signs in with the owner key and receives an HTTP-only session
+cookie. Native clients should send `Authorization: Bearer <key>` with each API
+request. Interactive API documentation and OpenAPI endpoints are disabled.
+`/api/health` and `/api/auth/status` remain available without signing in.
 
-The portable tunnel executable is installed at
-`%LOCALAPPDATA%\RepoLens\tools\cloudflared.exe`. To start a new tunnel:
+Use one backend process and worker. Indexing jobs rely on a single in-process
+worker and are not coordinated across multiple backend instances. When the
+backend restarts, unfinished indexing and evaluation jobs are marked `FAILED`;
+they do not resume automatically. Reindex the repository or rerun the
+evaluation manually.
+
+## Local development
+
+From the repository root:
 
 ```powershell
-& "$env:LOCALAPPDATA\RepoLens\tools\cloudflared.exe" tunnel --url http://127.0.0.1:3000 --no-autoupdate
+Copy-Item .env.example backend/.env
+# Edit backend/.env and set REPOLENS_ACCESS_KEY to a random secret of 32+ characters.
+cd backend
+uvicorn app.main:app --reload --port 8000
 ```
 
-The running frontend uses the separate `.next-audit` build directory. From
-`frontend`, its build/start commands are:
+The default maximum upload size is 50 MB (`MAX_UPLOAD_MB`). For predictable
+offline embedding behavior, set `EMBEDDING_PROVIDER=local`. The Sentence
+Transformers provider loads a model only from the local cache and never
+downloads one automatically. Changing embedding providers or models requires
+reindexing existing repositories. Dense indexes created before embedding
+metadata was saved are legacy indexes and also require reindexing before dense
+retrieval.
 
-```powershell
-$env:REPOLENS_BUILD_DIR = '.next-audit'
-npm run build
-npm run start -- --hostname 127.0.0.1
-```
+## Docker Compose
 
-Stop that frontend before rebuilding the directory it serves. The backend runs
-with `APP_ENV=production` and `EMBEDDING_PROVIDER=local`, avoiding verbose SQL
-logging. Ollama still uses the installed `qwen2.5-coder:latest` model.
-
-For future development-server use, `frontend/.env.local` sets
-`REPOLENS_PREVIEW_HOST` to the exact generated hostname. Update it if the tunnel
-hostname changes; it controls development asset permissions, not production API
-routing. The frontend configuration does not allow arbitrary development origins.
-
-See [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
-for temporary-link and availability limitations.
-
-## Docker server
-
-Run these commands from the checkout on a server with Docker Engine and Compose:
+Put `REPOLENS_ACCESS_KEY` in the root `.env` file, then run:
 
 ```sh
-docker compose build
-docker compose up -d
-docker compose exec ollama ollama pull llama3.1:8b
-docker compose ps
-curl --fail http://127.0.0.1:8000/api/health
-curl --fail http://127.0.0.1:3000/api/health
+docker compose up --build
 ```
 
-Ollama needs sufficient server memory for the selected model. The compose default
-is `llama3.1:8b`; pulling a different model requires setting `LLM_MODEL` in the
-backend service and recreating that service. Model downloads and uploaded
-repositories persist in separate named volumes. Do not delete those volumes
-when updating the app.
+- Web UI: `http://localhost:3000`
+- API: `http://localhost:8000` (interactive docs are disabled)
+- Ollama: `http://localhost:11434`
 
-The frontend uses same-origin `/api` requests and proxies to `backend:8000`.
-This address is set during the frontend build and supplied to its runtime.
-Backend and Ollama diagnostic ports bind only to the server's loopback interface.
-Local embeddings are the default; `EMBEDDING_PROVIDER` can override that setting.
-Reindex repositories after changing providers.
+Compose defaults to `EMBEDDING_PROVIDER=local`. Model downloads and uploaded
+repositories persist in separate named volumes. Do not remove those volumes
+when updating the app. The Compose file runs one backend container, matching
+the single-process worker requirement.
 
-Put an HTTPS reverse proxy in front of frontend port 3000. The current app has
-shared repositories and chat sessions without per-user access control. Use
-proxy authentication or a private network for a private deployment; exposing it
-as an unrestricted public service exposes its shared repository data to visitors.
+## Public access
+
+No public tunnel is currently active. The prior temporary Quick Tunnel hostname
+expired, so there is no current public demo URL to use. Starting a new Quick
+Tunnel creates a temporary hostname and exposes the shared owner workspace to
+anyone who can reach it. Keep the host machine, frontend, backend, and tunnel
+running for as long as the link should work. A restarted tunnel receives a new
+hostname.
 
 ## Managed hosting
 
 A managed deployment needs a hosting account and a configured backend address
-at frontend build time. It also needs a persistent disk for the SQLite database,
-uploaded source files and FAISS indexes. On Render, free services cannot attach
-persistent disks, so an ephemeral demo loses this data after a restart or deploy.
-See [Render persistent disks](https://render.com/docs/disks) and
-[free service limitations](https://render.com/docs/free).
+at frontend build time. It also needs persistent storage for the SQLite
+database, uploaded source files, and indexes. The deployment must preserve the
+single-backend-process requirement and protect the shared owner workspace.
 
-A remote backend cannot use Ollama running on the developer's localhost. Provision
+A remote backend cannot use Ollama running on a developer's localhost. Provision
 a server-side model or configure a supported generation API. Without one, chat
 uses the application's grounded offline fallback rather than model generation.
 
 ## Verification status
 
-Compose configuration validation passed. Container builds and remote runtime
-checks have not run: the local Docker daemon is unavailable and a hosting account
-or server has not been supplied. The corrected build contexts exclude local
-environment files, dependencies, caches and repository databases.
+Compose configuration validation has passed. Container builds and remote
+runtime checks have not run because no Docker daemon or hosting account/server
+was available during the last deployment review.

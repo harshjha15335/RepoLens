@@ -20,6 +20,7 @@ async def test_background_evaluation_returns_four_distinct_strategies(tmp_path, 
         await connection.run_sync(Base.metadata.create_all)
 
     dataset = tmp_path / "questions.json"
+    monkeypatch.setattr(service, "DEFAULT_DATASET", tmp_path / "default.json")
     dataset.write_text(json.dumps({"questions": [{
         "id": "q1", "question": "Find Calculator", "relevant_files": ["src/calculator.py"],
     }]}), encoding="utf-8")

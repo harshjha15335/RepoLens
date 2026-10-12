@@ -3,17 +3,12 @@
 import React, { useState } from "react";
 import {
   Search,
-  Sliders,
   Layers,
-  Sparkles,
   Clock,
   X,
   FileCode,
   ArrowRight,
-  ExternalLink,
   RefreshCw,
-  Cpu,
-  CheckCircle2,
 } from "lucide-react";
 import { RetrievedChunk, Citation } from "../types";
 import { api } from "../lib/api";

@@ -6,7 +6,6 @@ import {
   Search,
   Boxes,
   Network,
-  MessageSquare,
   GraduationCap,
   BarChart3,
   Settings,

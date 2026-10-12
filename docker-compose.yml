@@ -1,8 +1,8 @@
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -11,7 +11,8 @@ services:
       - APP_ENV=production
       - LOG_LEVEL=INFO
       - DATA_DIR=/app/data
-      - DATABASE_URL=sqlite+aiosqlite:///./data/codementor.db
+      - REPOLENS_ACCESS_KEY=${REPOLENS_ACCESS_KEY:?Set REPOLENS_ACCESS_KEY in the environment}
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/codementor.db
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-local}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - LLM_PROVIDER=ollama
@@ -30,8 +31,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_BACKEND_URL: http://backend:8000
     ports:

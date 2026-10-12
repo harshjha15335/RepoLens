@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /app/backend
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -9,11 +9,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install the CPU-only PyTorch wheel before the project dependencies so
 # sentence-transformers does not pull the default CUDA-enabled distribution.
-COPY pyproject.toml README.md ./
+COPY backend/pyproject.toml backend/README.md ./
 RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
 
 # Copy application
-COPY app/ app/
+COPY backend/app/ app/
+COPY evaluation/datasets/default.json /app/evaluation/datasets/default.json
 
 # Install dependencies declared by the project without an editable install.
 RUN pip install --no-cache-dir .

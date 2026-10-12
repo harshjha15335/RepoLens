@@ -3,6 +3,7 @@
 import json
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
@@ -37,7 +38,7 @@ from app.schemas.schemas import (
     SymbolInfo,
     SymbolListResponse,
 )
-from app.services.ingestion.service import IngestionService
+from app.services.ingestion.service import IngestionService, validate_git_url
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -105,33 +106,40 @@ async def upload_repository(
     if not file.filename or not file.filename.endswith(".zip"):
         raise RepositoryValidationError("Only ZIP files are supported")
 
-    # Read file content
-    content = await file.read()
-    if len(content) > settings.max_upload_bytes:
-        raise RepositoryValidationError(
-            f"File exceeds maximum upload size of {settings.max_upload_mb}MB"
-        )
+    staged_path = None
+    repo_dir = None
+    try:
+        # Read no more than one fixed-size chunk into application memory.
+        with tempfile.NamedTemporaryFile(dir=settings.repos_path, prefix="upload-", delete=False) as staged:
+            staged_path = Path(staged.name)
+            total_bytes = 0
+            while chunk := await file.read(1024 * 1024):
+                total_bytes += len(chunk)
+                if total_bytes > settings.max_upload_bytes:
+                    raise RepositoryValidationError(
+                        f"File exceeds maximum upload size of {settings.max_upload_mb}MB"
+                    )
+                staged.write(chunk)
 
-    # Create repository record
-    repo_name = file.filename.replace(".zip", "")
-    repo = Repository(
-        name=repo_name,
-        source_type="zip",
-        status=RepositoryStatus.PENDING,
-    )
-    db.add(repo)
-    await db.flush()
-
-    # Save ZIP file
-    repo_dir = settings.repos_path / repo.id
-    repo_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = repo_dir / "source.zip"
-    zip_path.write_bytes(content)
-
-    repo.storage_path = str(repo_dir)
-    # Background tasks can run before the request dependency commits. Their
-    # separate sessions must be able to read this record and its storage path.
-    await db.commit()
+        repo = Repository(name=Path(file.filename).stem, source_type="zip", status=RepositoryStatus.PENDING)
+        db.add(repo)
+        await db.flush()
+        repo_dir = settings.repos_path / repo.id
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = repo_dir / "source.zip"
+        staged_path.replace(zip_path)
+        repo.storage_path = str(repo_dir)
+        # Workers use a separate session and require a committed record.
+        await db.commit()
+    except BaseException:
+        await db.rollback()
+        if staged_path is not None:
+            staged_path.unlink(missing_ok=True)
+        if repo_dir is not None:
+            shutil.rmtree(repo_dir, ignore_errors=True)
+        raise
+    finally:
+        await file.close()
 
     logger.info(f"Repository uploaded: {repo.name} ({repo.id})")
 
@@ -155,10 +163,7 @@ async def import_git_repository(
     """Import a Git repository by URL."""
     if background_tasks is None:
         background_tasks = BackgroundTasks()
-    # Basic URL validation
-    url = request.url.strip()
-    if not url.startswith(("https://", "http://", "git@")):
-        raise RepositoryValidationError("Invalid Git URL. Use HTTPS or SSH URL.")
+    url = await validate_git_url(request.url)
     if request.branch is not None and (
         not request.branch.strip() or request.branch.startswith("-")
     ):

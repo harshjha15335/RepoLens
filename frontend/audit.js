@@ -1,6 +1,6 @@
 
-const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const ARTIFACT_DIR = 'C:\\Users\\ranja\\.gemini\\antigravity-ide\\brain\\11977ce9-721a-45ee-88dd-eb7cb28870f5';
+const EDGE_PATH = process.env.BROWSER_EXECUTABLE_PATH;
+const ARTIFACT_DIR = process.env.AUDIT_ARTIFACT_DIR || 'artifacts/browser-audit';
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -10,6 +10,10 @@ async function runAudit() {
   const { default: puppeteer } = await import('puppeteer-core');
   const { default: path } = await import('node:path');
   const { default: fs } = await import('node:fs');
+  if (!EDGE_PATH) {
+    throw new Error('Set BROWSER_EXECUTABLE_PATH to a local browser executable before running this source audit.');
+  }
+  fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
   console.log('=== Starting CodeMentor-RAG Browser Audit ===');
   const browser = await puppeteer.launch({
     executablePath: EDGE_PATH,
@@ -272,25 +276,12 @@ async function runAudit() {
     await sleep(500);
 
     // 10. Theme Toggle
-    logStep('Theme Toggle', 'RUNNING', 'Testing Theme Toggle');
-    await page.evaluate(() => {
-      const themeBtn = Array.from(document.querySelectorAll('button')).find(
-        b => b.title && b.title.includes('Theme')
-      );
-      if (themeBtn) themeBtn.click();
-    });
-    await sleep(1000);
-    await snap('14_light_theme');
-
-    await page.evaluate(() => {
-      const themeBtn = Array.from(document.querySelectorAll('button')).find(
-        b => b.title && b.title.includes('Theme')
-      );
-      if (themeBtn) themeBtn.click();
-    });
-    await sleep(1000);
-    await snap('15_dark_theme');
-    logStep('Theme Toggle', 'PASS', 'Light & Dark theme toggled successfully');
+    const themeButton = await page.$('button[title*="Theme"]');
+    if (themeButton) {
+      logStep('Theme Toggle', 'WARN', 'Theme control is present; visual mode changes are not asserted by this audit');
+    } else {
+      logStep('Theme Toggle', 'SKIP', 'No theme control is available in this interface');
+    }
 
     // 11. Top Modals: Retrieval Lab & Settings
     logStep('Retrieval Lab Modal', 'RUNNING', 'Opening Retrieval Lab');

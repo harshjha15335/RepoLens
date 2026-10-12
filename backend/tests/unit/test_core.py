@@ -550,14 +550,14 @@ class TestConfiguration:
     def test_default_settings(self, default_settings):
         settings = default_settings
         assert settings.app_env == "development"
-        assert settings.max_upload_mb == 500
+        assert settings.max_upload_mb == 50
         assert settings.dense_top_k == 20
         assert settings.bm25_top_k == 20
         assert settings.rrf_k == 60
 
     def test_max_upload_bytes(self, default_settings):
         settings = default_settings
-        assert settings.max_upload_bytes == 500 * 1024 * 1024
+        assert settings.max_upload_bytes == 50 * 1024 * 1024
 
     def test_embedding_config(self, default_settings):
         settings = default_settings

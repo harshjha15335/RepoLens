@@ -29,15 +29,18 @@ async def test_reindex_twice_replaces_files_chunks_and_graph(tmp_path, monkeypat
         await connection.run_sync(Base.metadata.create_all)
 
     class FakeEmbeddings:
+        metadata = {"provider": "test", "model": "test", "dimension": 1, "version": 1, "fingerprint": "test"}
+
         async def embed_documents(self, texts):
             return [[1.0] for _ in texts]
 
     index_sizes = []
 
     class FakeIndex:
-        async def build_indexes(self, repository_id, chunks, embeddings):
+        async def build_indexes(self, repository_id, chunks, embeddings, embedding_metadata):
             index_sizes.append(len(chunks))
             assert len(chunks) == len(embeddings)
+            assert embedding_metadata == FakeEmbeddings.metadata
 
     monkeypatch.setattr(ingestion, "EmbeddingService", FakeEmbeddings)
     monkeypatch.setattr(ingestion, "IndexingService", FakeIndex)

@@ -14,7 +14,6 @@ import {
   Code2,
   Layers,
   Settings,
-  ChevronDown,
 } from "lucide-react";
 import { FileContent, CodeContextAttachment, TutorMode } from "../types";
 
@@ -41,7 +40,7 @@ interface CodeViewerProps {
 }
 
 // Syntax highlighting rules matching the reference colorful IDE screenshot
-function highlightSyntax(line: string, language?: string | null): React.ReactNode {
+function highlightSyntax(line: string): React.ReactNode {
   if (!line) return " ";
 
   const rules: [RegExp, string][] = [
@@ -351,7 +350,7 @@ export default function CodeViewer({
                   <button
                     onClick={() => {
                       setLayersMenuOpen(false);
-                      onCenterViewChange && onCenterViewChange("graph");
+                      onCenterViewChange?.("graph");
                     }}
                     style={{
                       width: "100%",
@@ -375,7 +374,7 @@ export default function CodeViewer({
                   <button
                     onClick={() => {
                       setLayersMenuOpen(false);
-                      onOpenLab && onOpenLab();
+                      onOpenLab?.();
                     }}
                     style={{
                       width: "100%",
@@ -399,7 +398,7 @@ export default function CodeViewer({
                   <button
                     onClick={() => {
                       setLayersMenuOpen(false);
-                      onOpenEvaluation && onOpenEvaluation();
+                      onOpenEvaluation?.();
                     }}
                     style={{
                       width: "100%",
@@ -780,7 +779,7 @@ export default function CodeViewer({
                       color: "var(--text-primary)",
                     }}
                   >
-                    {highlightSyntax(line, fileContent.language)}
+                    {highlightSyntax(line)}
                   </span>
                 </div>
               );

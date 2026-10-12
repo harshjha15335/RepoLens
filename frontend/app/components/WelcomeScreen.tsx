@@ -11,13 +11,17 @@ interface WelcomeScreenProps {
   onImport: () => void;
   onLoadSample: () => void;
   onOpenIDE: () => void;
+  onSignOut?: () => void | Promise<void>;
 }
 
-export default function WelcomeScreen({ loading, error, sampleLoading, canOpenIDE, onRetry, onImport, onLoadSample, onOpenIDE }: WelcomeScreenProps) {
+export default function WelcomeScreen({ loading, error, sampleLoading, canOpenIDE, onRetry, onImport, onLoadSample, onOpenIDE, onSignOut }: WelcomeScreenProps) {
   return (
     <main className="welcome-screen">
       <section className="welcome-card" aria-labelledby="welcome-title">
-        <div className="welcome-brand"><Code2 size={22} aria-hidden="true" /> CodeMentor-RAG</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="welcome-brand" style={{ marginBottom: 0 }}><Code2 size={22} aria-hidden="true" /> CodeMentor-RAG</div>
+          {onSignOut && <button className="workspace-button" onClick={() => void onSignOut()}>Sign out</button>}
+        </div>
         <span className="welcome-eyebrow">YOUR CODEBASE, EXPLAINED</span>
         <h1 id="welcome-title">Find the code.<br />Understand the why.</h1>
         {loading ? (

@@ -7,9 +7,8 @@
 [![Tree--Sitter](https://img.shields.io/badge/Tree--Sitter-AST%20Chunking-1E293B)](https://tree-sitter.github.io)
 [![FAISS](https://img.shields.io/badge/FAISS-Dense%20Retrieval-blue)](https://github.com/facebookresearch/faiss)
 [![BM25](https://img.shields.io/badge/BM25-Lexical%20Ranking-orange)](https://en.wikipedia.org/wiki/Okapi_BM25)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-**CodeMentor-RAG** is a production-grade, retrieval-augmented coding intelligence system that helps engineers, team leads, and learners rapidly explore, understand, and debug complex codebases.
+**CodeMentor-RAG** is a retrieval-augmented coding intelligence system for exploring, understanding, and debugging codebases.
 
 Unlike generic code search tools that treat source code as flat text, **CodeMentor-RAG** parses code into Abstract Syntax Trees (ASTs) using Tree-sitter, models dependency and call graphs, and applies a multi-stage hybrid retrieval pipeline (Dense Vector + Lexical BM25 + Reciprocal Rank Fusion + 1-Hop Code Graph Expansion + MMR Diversity). Answers are synthesized across distinct tutor personas and grounded with line-accurate, interactive citations.
 
@@ -23,7 +22,7 @@ Unlike generic code search tools that treat source code as flat text, **CodeMent
    - Small-to-big chunking preserves local AST node context alongside broader parent context.
 
 2. **Advanced Multi-Strategy Hybrid Retrieval**:
-   - **Dense Retrieval**: FAISS index using SentenceTransformers (`all-MiniLM-L6-v2`) with cosine similarity.
+   - **Dense Retrieval**: FAISS index using the configured embedding provider. The checked-in Compose setup selects deterministic local token/ngram embeddings; SentenceTransformers and Ollama providers are also available.
    - **Lexical BM25 Retrieval**: Custom code-aware tokenization splitting `camelCase`, `snake_case`, identifiers, and file paths.
    - **Reciprocal Rank Fusion (RRF)**: Merges rank scores without calibration sensitivity ($k=60$).
    - **Code Knowledge Graph Expansion**: 1-hop BFS traversing caller-callee, inheritance, and import relationships to pull connected dependencies into context.
@@ -90,7 +89,7 @@ codementor-rag/
 │   │   ├── schemas/         # Pydantic request/response schemas
 │   │   ├── services/        # Ingestion, Parser, Graph, Retrieval, Generation, Eval
 │   │   └── utils/           # Path security, language detection, tokenizers
-│   ├── tests/               # 37 passing unit & integration tests
+│   ├── tests/               # Backend unit and integration tests
 │   ├── Dockerfile           # Python 3.12 slim container definition
 │   └── pyproject.toml       # Backend dependencies and tools
 ├── frontend/
@@ -141,7 +140,15 @@ source venv/bin/activate
 pip install -e .
 uvicorn app.main:app --reload --port 8000
 ```
-Backend will be live at `http://localhost:8000` (API documentation at `http://localhost:8000/docs`).
+Backend will be live at `http://localhost:8000`. Interactive API documentation is disabled.
+
+Configure owner access before starting the backend. From the repository root, copy
+`.env.example` to `backend/.env` and replace `REPOLENS_ACCESS_KEY` with a random
+secret of at least 32 characters. The backend loads `backend/.env` when started
+from the `backend` directory. Sign in through the web UI with that key. Native
+API clients can send `Authorization: Bearer <key>` on each request. RepoLens has
+one shared owner account and shared repositories and chat sessions; it does not
+provide per-user accounts or data isolation. Run one backend worker.
 
 #### 2. Start the Frontend
 
@@ -160,18 +167,36 @@ python scripts/seed_demo.py
 ```
 This automatically uploads `sample-repos/calculator.zip`, triggers Tree-sitter AST parsing, builds the code graph and FAISS vector index, and creates sample conversations.
 
+The seeder reads `REPOLENS_ACCESS_KEY` from the process environment or the local
+`backend/.env` file. Set `EMBEDDING_PROVIDER=local` in `backend/.env` for the
+recommended deterministic local embeddings. Sentence Transformers only loads a
+model already present in its cache; it does not download models automatically.
+Changing the embedding provider or model requires reindexing repositories.
+Older dense indexes without embedding metadata also need to be reindexed.
+
+The default maximum upload size is 50 MB (`MAX_UPLOAD_MB`). A backend restart
+marks unfinished indexing and evaluation jobs `FAILED`; start them again
+manually. Indexing work requires a single backend process.
+
 ---
 
 ### Method B: Docker Compose
 
 To run the complete production stack (Backend + Frontend + Ollama) in Docker:
 
+Set `REPOLENS_ACCESS_KEY` to a random secret of at least 32 characters in the
+environment or a root `.env` file first. Compose requires this value and the
+backend will not start with a missing or weak key. The web UI uses cookie-based
+sign-in; native API clients can use `Authorization: Bearer <key>`. API docs are
+disabled. RepoLens is a single-owner application with shared data, not a
+multi-user service. Run one backend worker.
+
 ```bash
 docker compose up --build
 ```
 
 - Web UI: `http://localhost:3000`
-- API & Docs: `http://localhost:8000/docs`
+- API: `http://localhost:8000` (interactive docs are disabled)
 - Ollama: `http://localhost:11434`
 
 ---
@@ -185,7 +210,7 @@ cd backend
 pytest -v
 ```
 
-All 37 test suites validate:
+The backend suite covers:
 - Path traversal & ZIP security sanitization
 - Tree-sitter AST parsing for Python and JavaScript
 - Small-to-big structural chunking
@@ -194,7 +219,7 @@ All 37 test suites validate:
 - Maximal Marginal Relevance (MMR) diversity
 - Intent classification heuristics
 - Code graph inheritance and call flow edges
-- Hallucination-free citation extraction
+- Citation extraction and validation
 
 ---
 
@@ -219,27 +244,34 @@ All 37 test suites validate:
 
 ---
 
-## Evaluation Results
+## Evaluation
 
-Benchmarking on the `sample-repos/calculator` evaluation dataset (12 multi-file architectural and symbol queries):
+The included `evaluation/datasets/default.json` contains 12 diagnostic questions
+for the sample calculator repository. A recent local run using deterministic
+token/ngram embeddings reported the following retrieval results:
 
-| Retrieval Strategy | Recall@5 | Recall@10 | MRR | Avg Latency |
-|---|---|---|---|---|
-| **Lexical BM25** | 75.0% | 83.3% | 0.72 | ~4.2 ms |
-| **Dense Vector (FAISS)** | 83.3% | 91.7% | 0.81 | ~12.5 ms |
-| **Hybrid RRF** | 91.7% | 100.0% | 0.89 | ~16.8 ms |
-| **Graph Expansion** | **100.0%** | **100.0%** | **0.95** | ~21.4 ms |
+| Strategy | Recall@5 | Recall@10 | MRR | Mean retrieval latency |
+|---|---:|---:|---:|---:|
+| BM25 | 56.3% | 72.5% | 0.783 | 12.2 ms |
+| Dense | 49.2% | 70.0% | 0.729 | 12.4 ms |
+| Hybrid RRF | 54.6% | 72.3% | 0.781 | 13.3 ms |
+| Graph expansion | 54.6% | 75.6% | 0.785 | 26.4 ms |
+
+These figures describe one small local dataset and run. They are diagnostic,
+hardware-dependent measurements, not evidence of general retrieval accuracy.
+See [the public audit](docs/audit/PUBLIC_AUDIT.md) for the run details and
+limitations.
 
 ---
 
 ## Security
 
 - **Path Traversal Defenses**: Rejects paths containing `..`, absolute paths, or symbolic links resolving outside the repository root.
-- **Archive Size & File Limits**: Prevents zip bombs by enforcing maximum file sizes (100MB) and extraction byte limits.
+- **Archive Size & File Limits**: Prevents zip bombs with a configurable upload cap (50 MB by default), per-file limits, and extraction byte limits.
 - **Citation Grounding**: AI Tutor responses are strictly cross-referenced against retrieved chunk coordinates to prevent hallucinated line references.
 
 ---
 
 ## License
 
-MIT License. Designed and built as an autonomous production-grade capstone project.
+The repository does not currently include a license file.

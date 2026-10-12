@@ -173,12 +173,21 @@ class EvaluationService:
                     pass
 
     @staticmethod
+    def resolve_dataset_path(dataset_path: str | None) -> Path:
+        """Resolve a client-selected dataset inside the approved bundled directory."""
+        dataset_root = DEFAULT_DATASET.parent.resolve()
+        path = Path(dataset_path) if dataset_path else DEFAULT_DATASET
+        if not path.is_absolute():
+            path = dataset_root / path
+        path = path.resolve()
+        if not path.is_relative_to(dataset_root) or path.suffix.lower() != ".json":
+            raise EvaluationError("Select a JSON dataset inside the bundled evaluation/datasets directory")
+        return path
+
+    @staticmethod
     def _load_dataset(dataset_path: str | None, settings) -> dict | None:
         """Load evaluation dataset from file."""
-        if dataset_path:
-            path = Path(dataset_path)
-        else:
-            path = DEFAULT_DATASET
+        path = EvaluationService.resolve_dataset_path(dataset_path)
 
         if not path.exists():
             logger.warning("No evaluation dataset found at %s", path)

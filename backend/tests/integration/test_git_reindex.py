@@ -2,16 +2,18 @@
 
 import shutil
 import subprocess
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app.core.config import Settings
 from app.core.errors import RepositoryValidationError
+from app.services.ingestion import service as ingestion_module
 from app.services.ingestion.service import IngestionService
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="Git is required")
-async def test_git_refresh_keeps_selected_branch_and_fetches_new_changes(tmp_path):
+async def test_git_refresh_keeps_selected_branch_and_fetches_new_changes(tmp_path, monkeypatch):
     upstream = tmp_path / "upstream"
     upstream.mkdir()
 
@@ -31,6 +33,17 @@ async def test_git_refresh_keeps_selected_branch_and_fetches_new_changes(tmp_pat
     git("commit", "-am", "Feature fixture")
     settings = Settings(data_dir=str(tmp_path / "data"))
     checkout = settings.repos_path / "test-repository" / "source"
+    # Keep this integration offline while testing the real Git refresh commands.
+    # Input and transport security have independent adversarial regressions.
+    monkeypatch.setattr(ingestion_module, "validate_git_url", AsyncMock(side_effect=lambda url: url))
+    monkeypatch.setattr(ingestion_module, "GIT_SECURITY_CONFIG", ("protocol.file.allow=always",))
+    real_subprocess = ingestion_module.asyncio.create_subprocess_exec
+
+    async def local_subprocess(*args, **kwargs):
+        kwargs["env"]["GIT_ALLOW_PROTOCOL"] = "file"
+        return await real_subprocess(*args, **kwargs)
+
+    monkeypatch.setattr(ingestion_module.asyncio, "create_subprocess_exec", local_subprocess)
     await IngestionService._clone_git(str(upstream), checkout, "feature", settings)
     assert "feature" in (checkout / "main.py").read_text()
 

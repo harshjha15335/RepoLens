@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.database import get_session_factory
+from app.core.errors import IndexError_
 from app.core.logging import get_logger
 from app.models.models import Chunk, GraphEdge, GraphNode
 from app.services.embeddings.service import EmbeddingService
@@ -158,6 +159,9 @@ class RetrievalService:
         7. Optional reranking
         """
         start_time = time.time()
+        if strategy == "graph_expansion":
+            enable_graph_expansion = True
+            strategy = "hybrid"
         settings = self.settings
 
         if top_k is None:
@@ -279,7 +283,17 @@ class RetrievalService:
             if faiss_index is None:
                 return []
 
+            indexed_metadata = self.indexing_service.load_embedding_metadata(repository_id)
             query_embedding = await self.embedding_service.embed_query(query)
+            # Query encoding can activate a fallback, so compare its resolved provider.
+            query_metadata = self.embedding_service.metadata
+            if (query_metadata != indexed_metadata
+                    or len(query_embedding) != indexed_metadata["dimension"]
+                    or faiss_index.d != indexed_metadata["dimension"]):
+                raise IndexError_(
+                    "Dense index embedding provider or model has changed. "
+                    "Reindex this repository with the current embedding provider."
+                )
             query_vector = np.array([query_embedding], dtype=np.float32)
 
             scores, indices = faiss_index.search(query_vector, min(top_k, faiss_index.ntotal))
@@ -291,6 +305,8 @@ class RetrievalService:
 
             return results
 
+        except IndexError_:
+            raise
         except Exception as e:
             logger.error(f"Dense search failed: {e}")
             return []
@@ -306,6 +322,8 @@ class RetrievalService:
 
             return bm25_index.search(query, top_k)
 
+        except IndexError_:
+            raise
         except Exception as e:
             logger.error(f"BM25 search failed: {e}")
             return []

@@ -1,6 +1,7 @@
 """Workers must see committed repository state before request teardown."""
 
 import io
+import socket
 import zipfile
 
 import pytest
@@ -19,6 +20,9 @@ from app.schemas.schemas import GitImportRequest
 async def test_indexer_sees_committed_repository_before_request_finishes(tmp_path, monkeypatch, operation):
     settings = Settings(data_dir=str(tmp_path / "data"))
     monkeypatch.setattr(repositories, "get_settings", lambda: settings)
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("140.82.112.3", 443)),
+    ])
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as connection:

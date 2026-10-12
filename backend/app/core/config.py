@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     # Application
     app_env: str = Field(default="development", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    access_key: str = Field(default="", alias="REPOLENS_ACCESS_KEY", repr=False)
+    session_hours: int = Field(default=8, ge=1, le=24, alias="SESSION_HOURS")
+    max_active_operations: int = Field(default=2, ge=1, le=8, alias="MAX_ACTIVE_OPERATIONS")
+    api_requests_per_minute: int = Field(default=120, ge=10, alias="API_REQUESTS_PER_MINUTE")
+    expensive_requests_per_minute: int = Field(default=12, ge=1, alias="EXPENSIVE_REQUESTS_PER_MINUTE")
 
     # Data Storage
     data_dir: str = Field(default="./data", alias="DATA_DIR")
@@ -22,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     # Upload Limits
-    max_upload_mb: int = Field(default=500, alias="MAX_UPLOAD_MB")
+    max_upload_mb: int = Field(default=50, ge=1, alias="MAX_UPLOAD_MB")
     max_extracted_mb: int = Field(default=2000, alias="MAX_EXTRACTED_MB")
     max_repository_files: int = Field(default=10000, alias="MAX_REPOSITORY_FILES")
     max_file_mb: int = Field(default=10, alias="MAX_FILE_MB")
@@ -70,7 +75,7 @@ class Settings(BaseSettings):
         default="http://localhost:11434", alias="OLLAMA_BASE_URL"
     )
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore", "populate_by_name": True}
 
     @property
     def data_path(self) -> Path:

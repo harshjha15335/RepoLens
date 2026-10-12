@@ -2,7 +2,6 @@
 
 import json
 import math
-import pickle
 import re
 from collections import Counter
 
@@ -34,18 +33,27 @@ class BM25Index:
         self.n_docs: int = 0
         self.tf: list[dict[str, int]] = []
         self.chunk_ids: list[str] = []
+        self.documents: list[dict] = []
 
     def build(self, chunks: list[dict]):
         """Build BM25 index from chunks."""
-        self.n_docs = len(chunks)
+        self._build_documents([
+            {"chunk_id": chunk.get("content_hash", ""), "tokens": self._tokenize(chunk)}
+            for chunk in chunks
+        ])
+
+    def _build_documents(self, documents: list[dict]):
+        """Derive all numeric index state from plain strings."""
+        self.documents = documents
+        self.n_docs = len(documents)
         self.doc_freqs = {}
         self.doc_lens = []
         self.tf = []
         self.chunk_ids = []
 
-        for chunk in chunks:
-            tokens = self._tokenize(chunk)
-            self.chunk_ids.append(chunk.get("content_hash", ""))
+        for document in documents:
+            tokens = document["tokens"]
+            self.chunk_ids.append(document["chunk_id"])
 
             tf = Counter(tokens)
             self.tf.append(dict(tf))
@@ -139,33 +147,40 @@ class BM25Index:
         return tokens
 
     def save(self, path: str):
-        """Save BM25 index to disk."""
+        """Save data-only JSON; numeric search state is rebuilt when loading."""
         data = {
+            "version": 1,
             "k1": self.k1,
             "b": self.b,
-            "doc_freqs": self.doc_freqs,
-            "doc_lens": self.doc_lens,
-            "avg_dl": self.avg_dl,
-            "n_docs": self.n_docs,
-            "tf": self.tf,
-            "chunk_ids": self.chunk_ids,
+            "documents": self.documents,
         }
-        with open(path, "wb") as f:
-            pickle.dump(data, f)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
 
     @classmethod
     def load(cls, path: str) -> "BM25Index":
-        """Load BM25 index from disk."""
-        with open(path, "rb") as f:
-            data = pickle.load(f)
-
-        index = cls(k1=data["k1"], b=data["b"])
-        index.doc_freqs = data["doc_freqs"]
-        index.doc_lens = data["doc_lens"]
-        index.avg_dl = data["avg_dl"]
-        index.n_docs = data["n_docs"]
-        index.tf = data["tf"]
-        index.chunk_ids = data["chunk_ids"]
+        """Load validated JSON, never deserializing executable legacy artifacts."""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or type(data.get("version")) is not int or data["version"] != 1:
+                raise ValueError("Unsupported BM25 format")
+            k1, b = data["k1"], data["b"]
+            if (type(k1) not in (int, float) or type(b) not in (int, float)
+                    or not math.isfinite(k1) or not math.isfinite(b) or k1 <= 0 or not 0 <= b <= 1):
+                raise ValueError("Invalid BM25 parameters")
+            documents = data["documents"]
+            if not isinstance(documents, list):
+                raise ValueError("Invalid BM25 documents")
+            for document in documents:
+                if (not isinstance(document, dict) or not isinstance(document.get("chunk_id"), str)
+                        or not isinstance(document.get("tokens"), list)
+                        or any(not isinstance(token, str) for token in document["tokens"])):
+                    raise ValueError("Invalid BM25 document strings")
+        except (UnicodeError, ValueError, KeyError, TypeError, OverflowError, OSError) as exc:
+            raise IndexError_("BM25 index uses an invalid or legacy format. Reindex this repository.") from exc
+        index = cls(k1=k1, b=b)
+        index._build_documents(documents)
         return index
 
 
@@ -177,11 +192,17 @@ class IndexingService:
         repository_id: str,
         chunks: list[dict],
         embeddings: list[list[float]],
+        embedding_metadata: dict,
     ):
         """Build both FAISS and BM25 indexes."""
         settings = get_settings()
         index_dir = settings.indexes_path / repository_id
         index_dir.mkdir(parents=True, exist_ok=True)
+
+        self._validate_embedding_metadata(embedding_metadata)
+        if (len(embeddings) != len(chunks)
+                or any(len(vector) != embedding_metadata["dimension"] for vector in embeddings)):
+            raise IndexError_("Embedding vectors do not match their provider metadata. Reindex this repository.")
 
         # Build FAISS index
         if FAISS_AVAILABLE and embeddings:
@@ -217,10 +238,31 @@ class IndexingService:
             "repository_id": repository_id,
             "chunk_count": len(chunks),
             "embedding_dimension": len(embeddings[0]) if embeddings else 0,
-            "embedding_model": settings.embedding_model,
+            "embedding_model": embedding_metadata["model"],
+            "embedding": embedding_metadata,
         }
         with open(str(index_dir / "metadata.json"), "w") as f:
             json.dump(metadata, f)
+
+    @staticmethod
+    def _validate_embedding_metadata(metadata: dict):
+        if (not isinstance(metadata, dict)
+                or any(not isinstance(metadata.get(key), str) or not metadata[key]
+                       for key in ("provider", "model", "fingerprint"))
+                or type(metadata.get("dimension")) is not int or metadata["dimension"] <= 0
+                or type(metadata.get("version")) is not int or metadata["version"] != 1):
+            raise IndexError_("Dense index embedding metadata is missing or invalid. Reindex this repository.")
+
+    def load_embedding_metadata(self, repository_id: str) -> dict:
+        """Read the actual indexed vector identity; legacy settings are insufficient."""
+        path = get_settings().indexes_path / repository_id / "metadata.json"
+        try:
+            with open(path, encoding="utf-8") as file:
+                metadata = json.load(file)["embedding"]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise IndexError_("Dense index embedding metadata is missing or invalid. Reindex this repository.") from exc
+        self._validate_embedding_metadata(metadata)
+        return metadata
 
     def _build_faiss_index(self, embeddings: list[list[float]], path: str):
         """Build and save a FAISS index."""
@@ -261,6 +303,8 @@ class IndexingService:
 
         try:
             return BM25Index.load(str(path))
+        except IndexError_:
+            raise
         except Exception as e:
             logger.error(f"Failed to load BM25 index: {e}")
             return None

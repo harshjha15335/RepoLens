@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Code2, FolderTree, MessageSquare } from "lucide-react";
 import Header from "./components/Header";
+import AccessGate from "./components/AccessGate";
 import WelcomeScreen from "./components/WelcomeScreen";
 import Sidebar from "./components/Sidebar";
 import CodeViewer from "./components/CodeViewer";
@@ -29,6 +30,10 @@ import {
 import { api } from "./lib/api";
 
 export default function Home() {
+  return <AccessGate>{(signOut) => <Workspace onSignOut={signOut} />}</AccessGate>;
+}
+
+function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   // View state
   const [activeActivityView, setActiveActivityView] = useState<ActiveActivityView>("files");
   const [fontSize, setFontSize] = useState<number>(14);
@@ -528,6 +533,7 @@ export default function Home() {
             const readyRepo = repositories.find((repo) => repo.status?.toLowerCase() === "ready");
             activateRepository(readyRepo || repositories[0]);
           }}
+          onSignOut={onSignOut}
         />
         <UploadModal
           isOpen={uploadModalOpen}
@@ -570,6 +576,7 @@ export default function Home() {
           isPolling={isPolling}
           tutorMode={tutorMode}
           onTutorModeChange={setTutorMode}
+          onSignOut={onSignOut}
         />
 
         <nav className="workspace-mobile-nav" aria-label="Workspace panels">

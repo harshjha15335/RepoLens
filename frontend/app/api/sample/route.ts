@@ -2,16 +2,38 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    const origin = request.headers.get("origin");
+    const host = request.headers.get("host") || new URL(request.url).host;
+    let sameOrigin = !origin;
+    if (origin) {
+      try {
+        sameOrigin = new URL(origin).host === host;
+      } catch {
+        sameOrigin = false;
+      }
+    }
+    if (request.headers.get("sec-fetch-site") === "cross-site" || !sameOrigin) {
+      return NextResponse.json({ error: "Cross-site requests are not allowed" }, { status: 403 });
+    }
+    const headers = new Headers();
+    const cookie = request.headers.get("cookie");
+    if (cookie) headers.set("cookie", cookie);
+    const authResponse = await fetch(`${backendUrl}/api/auth/status`, { headers, cache: "no-store" });
+    const auth = await authResponse.json();
+    if (!authResponse.ok || !auth.authenticated) {
+      return NextResponse.json({ error: "Sign in to access RepoLens" }, { status: 401 });
+    }
     
-    // Path to sample-repos/calculator.zip
-    const zipPath = path.resolve(process.cwd(), "..", "sample-repos", "calculator.zip");
+    const zipPath = process.env.SAMPLE_REPOSITORY_ZIP
+      ? path.resolve(process.env.SAMPLE_REPOSITORY_ZIP)
+      : [path.join(process.cwd(), "sample-repos", "calculator.zip"), path.join(process.cwd(), "..", "sample-repos", "calculator.zip")].find((candidate) => fs.existsSync(candidate)) || "";
 
     if (!fs.existsSync(zipPath)) {
       return NextResponse.json(
-        { error: `Sample ZIP file not found at ${zipPath}` },
+        { error: "Sample repository is not available on this server" },
         { status: 404 }
       );
     }
@@ -23,6 +45,7 @@ export async function POST() {
 
     const response = await fetch(`${backendUrl}/api/repositories/upload`, {
       method: "POST",
+      headers,
       body: formData,
     });
 

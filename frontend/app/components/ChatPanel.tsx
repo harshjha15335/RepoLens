@@ -4,9 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Send,
   Bot,
-  User,
   FileCode,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   Layers,
@@ -18,7 +16,6 @@ import {
   Plus,
   History,
   Trash2,
-  Search,
 } from "lucide-react";
 import { ChatMessage, ChatSession, TutorMode, Citation, RetrievedChunk, CodeContextAttachment } from "../types";
 
@@ -71,12 +68,10 @@ export default function ChatPanel({
   messages,
   loading,
   tutorMode,
-  onTutorModeChange,
   onSendMessage,
   onCitationClick,
   contextAttachment,
   onRemoveContext,
-  repoName,
   isRepoReady,
   onOpenInterview,
   sessions,

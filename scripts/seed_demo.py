@@ -7,6 +7,7 @@ chat questions demonstrating each tutor mode.
 
 import sys
 import time
+import os
 import httpx
 from pathlib import Path
 
@@ -15,13 +16,40 @@ REPO_DIR = Path(__file__).resolve().parent.parent / "sample-repos" / "calculator
 ZIP_PATH = Path(__file__).resolve().parent.parent / "sample-repos" / "calculator.zip"
 
 
+def read_access_key():
+    """Read the owner key without ever echoing it to the terminal."""
+    key = os.environ.get("REPOLENS_ACCESS_KEY")
+    if key is None:
+        # Local backend settings use backend/.env; Compose uses the root .env.
+        for env_path in (Path(__file__).resolve().parent.parent / "backend" / ".env",
+                         Path(__file__).resolve().parent.parent / ".env"):
+            try:
+                lines = env_path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                name, separator, value = line.strip().partition("=")
+                if separator and name.strip().removeprefix("export ").strip() == "REPOLENS_ACCESS_KEY":
+                    key = value.strip()
+                    if len(key) >= 2 and key[0] == key[-1] and key[0] in "\\\"'":
+                        key = key[1:-1]
+                    break
+            if key is not None:
+                break
+    if not key or len(key) < 32:
+        print("Error: Set REPOLENS_ACCESS_KEY to a secret of at least 32 characters in the environment or backend/.env.")
+        sys.exit(1)
+    return key
+
+
 def main():
     print("CodeMentor-RAG Demo Seeder")
     print("=" * 40)
+    headers = {"Authorization": f"Bearer {read_access_key()}"}
 
     # 1. Check backend health
     try:
-        r = httpx.get(f"{BASE_URL}/health", timeout=5.0)
+        r = httpx.get(f"{BASE_URL}/health", headers=headers, timeout=5.0)
         if r.status_code != 200:
             print(f"Error: Backend health check failed with status {r.status_code}")
             sys.exit(1)
@@ -38,7 +66,7 @@ def main():
         print(f" Created sample archive at {ZIP_PATH}")
 
     # 3. Check if repository already exists
-    repos = httpx.get(f"{BASE_URL}/repositories").json().get("repositories", [])
+    repos = httpx.get(f"{BASE_URL}/repositories", headers=headers).json().get("repositories", [])
     existing = next((r for r in repos if r["name"] == "calculator"), None)
 
     repo_id = None
@@ -46,11 +74,15 @@ def main():
         print(f" Repository 'calculator' already exists (ID: {existing['id']})")
         repo_id = existing["id"]
         status = existing["status"]
+        if status == "FAILED":
+            print(" Repository indexing previously failed; reindex it from the web UI before seeding chats.")
+            sys.exit(1)
     else:
         print(" Uploading sample calculator repository...")
         with open(ZIP_PATH, "rb") as f:
             upload_resp = httpx.post(
                 f"{BASE_URL}/repositories/upload",
+                headers=headers,
                 files={"file": ("calculator.zip", f, "application/zip")},
                 timeout=30.0,
             )
@@ -63,24 +95,27 @@ def main():
         print(f" Upload successful! Repository ID: {repo_id}")
 
     # 4. Wait for indexing to complete
-    if status != "ready":
+    if status != "READY":
         print("⏳ Waiting for repository indexing (AST parsing, FAISS embedding, graph build)...")
         for _ in range(60):
             time.sleep(1.5)
-            s_resp = httpx.get(f"{BASE_URL}/repositories/{repo_id}/status").json()
+            s_resp = httpx.get(f"{BASE_URL}/repositories/{repo_id}/status", headers=headers).json()
             curr_status = s_resp.get("status")
             progress = s_resp.get("progress", 0)
             msg = s_resp.get("progress_message", "")
             print(f"  → Status: {curr_status} ({progress}%) - {msg}")
-            if curr_status == "ready":
+            if curr_status == "READY":
                 print(" Repository indexing completed successfully!")
                 break
-            elif curr_status == "failed":
+            elif curr_status == "FAILED":
                 print(f" Repository indexing failed: {s_resp.get('error_message')}")
                 sys.exit(1)
+        else:
+            print(" Error: Repository indexing did not finish within 90 seconds.")
+            sys.exit(1)
 
     # 5. Display stats
-    repo_info = httpx.get(f"{BASE_URL}/repositories/{repo_id}").json()
+    repo_info = httpx.get(f"{BASE_URL}/repositories/{repo_id}", headers=headers).json()
     stats = repo_info.get("stats", {})
     print("\n Repository Statistics:")
     print(f"  - Source Files: {stats.get('files', 0)}")
@@ -100,6 +135,7 @@ def main():
         print(f"  [{mode.upper()}] Asking: '{q}'...")
         chat_resp = httpx.post(
             f"{BASE_URL}/chat",
+            headers=headers,
             json={
                 "repository_id": repo_id,
                 "question": q,

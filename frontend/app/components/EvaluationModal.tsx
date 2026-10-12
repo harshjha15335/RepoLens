@@ -4,16 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Play,
-  CheckCircle2,
-  AlertCircle,
   RefreshCw,
   X,
-  Target,
-  Zap,
-  Check,
-  TrendingUp,
-  FileCheck,
-  Clock,
 } from "lucide-react";
 import { EvaluationRun, EvaluationMetricResult } from "../types";
 import { api } from "../lib/api";

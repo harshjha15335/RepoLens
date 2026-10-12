@@ -1,6 +1,8 @@
 """Embedding service with provider abstraction."""
 
 import asyncio
+import hashlib
+import json
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -14,6 +16,22 @@ logger = get_logger(__name__)
 
 class EmbeddingProvider(ABC):
     """Abstract base for embedding providers."""
+
+    provider_name: str
+
+    @property
+    def metadata(self) -> dict:
+        """Identify the vector space actually used, including its encoding version."""
+        identity = {
+            "provider": self.provider_name,
+            "model": self.model_name,
+            "dimension": self.dimension,
+            "version": 1,
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return {**identity, "fingerprint": fingerprint}
 
     @abstractmethod
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -45,6 +63,8 @@ class DeterministicLocalEmbeddingProvider(EmbeddingProvider):
     identifier awareness, character n-grams, and signed hashing projections.
     Guarantees indexing succeeds without network access or when HF CDN is denied.
     """
+
+    provider_name = "local"
 
     def __init__(self, dimension: int = 384):
         self._dimension = dimension
@@ -119,6 +139,8 @@ class DeterministicLocalEmbeddingProvider(EmbeddingProvider):
 class SentenceTransformerProvider(EmbeddingProvider):
     """Embedding provider using sentence-transformers with resilient local fallback."""
 
+    provider_name = "sentence-transformers"
+
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self._model_name = model_name
         self._model = None
@@ -131,7 +153,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
 
         target_dim = get_settings().embedding_dimension
 
-        # 1. Try local cache first to avoid contacting HF CDN
+        # Models must be provisioned explicitly; requests never download them.
         try:
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer(self._model_name, local_files_only=True)
@@ -142,32 +164,14 @@ class SentenceTransformerProvider(EmbeddingProvider):
                 f"(dim={self._dimension})"
             )
             return
-        except Exception as e_cache:
-            logger.debug(f"Local cache hit skipped for {self._model_name}: {e_cache}")
-
-        # 2. Try online download/load with 5s timeout to prevent hanging if CDN is blocked
-        import socket
-        orig_timeout = socket.getdefaulttimeout()
-        try:
-            socket.setdefaulttimeout(5.0)
-            from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self._model_name)
-            test = self._model.encode(["test"])
-            self._dimension = len(test[0])
-            logger.info(
-                f"Loaded embedding model: {self._model_name} "
-                f"(dim={self._dimension})"
-            )
         except Exception as e:
             logger.warning(
-                f"SentenceTransformer download or load failed ({e}). "
-                f"CDN connection to us.aws.cdn.hf.co may be denied or blocked. "
+                f"Cached SentenceTransformer load failed ({e}). "
                 f"Falling back to built-in DeterministicLocalEmbeddingProvider (dim={target_dim})."
             )
+            self._model = None
             self._fallback_provider = DeterministicLocalEmbeddingProvider(dimension=target_dim)
             self._dimension = target_dim
-        finally:
-            socket.setdefaulttimeout(orig_timeout)
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed documents in batches."""
@@ -237,9 +241,18 @@ class SentenceTransformerProvider(EmbeddingProvider):
             return self._fallback_provider.model_name
         return self._model_name
 
+    @property
+    def metadata(self) -> dict:
+        self._load_model()
+        if self._fallback_provider is not None:
+            return self._fallback_provider.metadata
+        return super().metadata
+
 
 class OllamaEmbeddingProvider(EmbeddingProvider):
     """Embedding provider using Ollama."""
+
+    provider_name = "ollama"
 
     def __init__(self, model_name: str = "nomic-embed-text", base_url: str = "http://localhost:11434"):
         self._model_name = model_name
@@ -313,3 +326,7 @@ class EmbeddingService:
     @property
     def model_name(self) -> str:
         return self.provider.model_name
+
+    @property
+    def metadata(self) -> dict:
+        return self.provider.metadata

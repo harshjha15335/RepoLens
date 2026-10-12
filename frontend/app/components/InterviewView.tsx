@@ -11,9 +11,7 @@ import {
   RefreshCw,
   FileCode,
   ExternalLink,
-  Target,
   Trophy,
-  HelpCircle,
   Send,
 } from "lucide-react";
 import { InterviewQuestion, InterviewFeedback, Citation } from "../types";
@@ -28,7 +26,6 @@ interface InterviewViewProps {
 
 export default function InterviewView({
   repositoryId,
-  repoName,
   onInspectCitation,
   onBackToCode,
 }: InterviewViewProps) {

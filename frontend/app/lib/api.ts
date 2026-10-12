@@ -43,6 +43,9 @@ async function request<T>(endpoint: string, options?: RequestInit, timeoutMs = D
     });
 
     if (!response.ok) {
+      if (response.status === 401 && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("repolens:unauthorized"));
+      }
       // A response stream can only be read once, even if JSON parsing fails.
       const body = await response.text();
       let errorDetail = body;

@@ -7,10 +7,7 @@ import {
   FolderArchive,
   PlayCircle,
   X,
-  CheckCircle2,
-  AlertCircle,
   RefreshCw,
-  FileCode,
 } from "lucide-react";
 import { Repository } from "../types";
 
