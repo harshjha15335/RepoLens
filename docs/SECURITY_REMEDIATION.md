@@ -36,10 +36,12 @@ who signs in with the owner key sees the same repositories and chat sessions.
 
 - Backend: 138 tests passed, 3 skipped; Ruff passed. The skips include a native
   symlink case unavailable without Windows symlink privilege; a mocked
-  containment regression still runs.
+  containment regression still runs. GitHub Actions on Linux passed all 141
+  backend tests and Ruff on commit `91e176c`.
 - Frontend: 12 API tests passed; TypeScript and the Next.js 16.4.0 production
   build passed. The production dependency scan reported zero vulnerabilities.
-  ESLint passed with zero errors and warnings after unused-code cleanup.
+  ESLint passed with zero errors and warnings after unused-code cleanup. The
+  GitHub Actions frontend job also passed on commit `91e176c`.
 - Runtime: all three existing calculator repositories were reindexed and
   reached `READY`. BM25, dense, hybrid and graph-expanded retrieval returned
   results. The production frontend proxy returned 401 for anonymous repository
@@ -68,9 +70,8 @@ who signs in with the owner key sees the same repositories and chat sessions.
   interview scoring is heuristic. Graph queries retain the 500-node cap and do
   not offer pagination. The small calculator benchmark does not establish
   general retrieval accuracy.
-- Docker images and the new CI workflow still need their first successful run
-  on a host with Docker and GitHub Actions. No public Cloudflare tunnel is
-  currently active; prior temporary hostnames expired. Public availability
-  has not been re-established.
+- Docker images still need their first build on a host with Docker. No public
+  Cloudflare tunnel is currently active; prior temporary hostnames expired.
+  Public availability has not been re-established.
 - The repository metadata names an MIT license, but there is no root LICENSE
   file. A copyright holder must confirm the intended grant before one is added.
