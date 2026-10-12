@@ -26,6 +26,8 @@ from app.models.models import (
     RepositoryFile,
     RepositoryStatus,
 )
+from app.services.artifact_store import SOURCE_ZIP, save_index, save_source_tree
+from app.services.artifact_store import delete as delete_artifact
 from app.services.chunking.service import ChunkingService
 from app.services.embeddings.service import EmbeddingService
 from app.services.graph.service import GraphService
@@ -185,6 +187,10 @@ class IngestionService:
                 if not files:
                     raise RepositoryValidationError("No processable files found in repository")
 
+                # Persist the files served by code-viewer and selected-code chat.
+                # They can then be restored on any short-lived service instance.
+                await save_source_tree(db, repository_id, source_dir, files)
+
                 # Save file records
                 await IngestionService._save_file_records(db, repo, files, source_dir)
                 repo.file_count = len(files)
@@ -291,6 +297,7 @@ class IngestionService:
 
                 for i, chunk_record in enumerate(chunk_records):
                     chunk_record.faiss_index = i
+                await save_index(db, repository_id)
                 await db.commit()
 
                 # Detect languages
@@ -307,6 +314,9 @@ class IngestionService:
                     "Repository indexed successfully"
                 )
                 repo.indexed_at = datetime.now(timezone.utc)
+                # The extracted source snapshot now suffices for ZIP reindexing.
+                # Drop the original compressed upload to conserve database quota.
+                await delete_artifact(db, repository_id, SOURCE_ZIP)
                 await db.commit()
 
                 logger.info(
@@ -455,6 +465,10 @@ class IngestionService:
             await run_git("-C", str(target_dir), "checkout", "-B", selected_branch, "FETCH_HEAD")
             await run_git("-C", str(target_dir), "reset", "--hard", "FETCH_HEAD")
         else:
+            # Hydrated source snapshots intentionally omit .git. A fresh clone
+            # must replace that read-only view on a new service instance.
+            if target_dir.exists() and any(target_dir.iterdir()):
+                shutil.rmtree(target_dir)
             args = ["clone", "--depth", "1", "--no-recurse-submodules"]
             if branch:
                 args.extend(["--branch", branch])

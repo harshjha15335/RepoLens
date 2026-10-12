@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
   distDir: process.env.REPOLENS_BUILD_DIR || ".next",
@@ -13,12 +13,15 @@ const nextConfig: NextConfig = {
     proxyTimeout: 150_000,
   },
   async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ];
+    return {
+      // Let Next.js handle its own /api/sample route before proxying backend APIs.
+      fallback: [
+        {
+          source: "/api/:path*",
+          destination: `${backendUrl}/api/:path*`,
+        },
+      ],
+    };
   },
 };
 

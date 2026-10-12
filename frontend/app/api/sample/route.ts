@@ -4,7 +4,7 @@ import path from "path";
 
 export async function POST(request: Request) {
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    const backendUrl = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
     const origin = request.headers.get("origin");
     const host = request.headers.get("host") || new URL(request.url).host;
     let sameOrigin = !origin;
