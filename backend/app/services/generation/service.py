@@ -377,6 +377,22 @@ class GenerationService:
 
         # Step 5: Extract and validate citations
         citations = self._extract_citations(answer, evidence_chunks)
+        if not citations:
+            # A model can answer from context yet omit the citation syntax. Show
+            # the retrieved source explicitly so the user can inspect it, without
+            # presenting the reference as proof of every claim in the answer.
+            for chunk in evidence_chunks:
+                file_path = chunk.get("file_path")
+                start_line = chunk.get("start_line")
+                end_line = chunk.get("end_line")
+                if not file_path or not isinstance(start_line, int) or not isinstance(end_line, int):
+                    continue
+                reference = f"[{file_path}:{start_line}-{end_line}]"
+                source_citations = self._extract_citations(reference, evidence_chunks)
+                if source_citations:
+                    answer = f"{answer.rstrip()}\n\nRetrieved source to inspect: {reference}"
+                    citations = source_citations
+                    break
 
         total_latency_ms = (time.time() - start_time) * 1000
 

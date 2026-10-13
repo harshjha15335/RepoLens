@@ -37,6 +37,20 @@ test("successful responses still return repository data", async (t) => {
   assert.deepEqual(await api.getRepositories(), []);
 });
 
+test("Git import leaves the branch unset for the repository default", async (t) => {
+  const requests = [];
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return new Response('{}');
+  });
+  await api.importGit("https://github.com/octocat/Hello-World.git");
+  await api.importGit("https://github.com/octocat/Hello-World.git", " master ");
+  assert.deepEqual(requests, [
+    { url: "https://github.com/octocat/Hello-World.git" },
+    { url: "https://github.com/octocat/Hello-World.git", branch: "master" },
+  ]);
+});
+
 function mockDeadlines(t) {
   const timers = new Map();
   let nextId = 0;

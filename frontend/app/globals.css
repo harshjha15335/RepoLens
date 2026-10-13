@@ -87,6 +87,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .welcome-secondary:hover { background: var(--surface-hover); }
 .welcome-secondary:disabled { cursor: wait; opacity: .7; }
 .welcome-hint { color: var(--text-muted); font-size: 12px; margin-top: 14px; }
+.welcome-repositories { margin-top: 26px; }
+.welcome-repositories h2 { margin: 0 0 10px; font-size: 14px; color: var(--text-primary); }
+.welcome-repository-list { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
+.welcome-repository { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text-primary); text-align: left; cursor: pointer; }
+.welcome-repository:hover, .welcome-repository:focus-visible { border-color: var(--blue); background: var(--blue-light); }
+.welcome-repository-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.welcome-repository-status { flex-shrink: 0; color: var(--text-secondary); font-size: 11px; text-transform: capitalize; }
 .welcome-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; border-top: 1px solid var(--border); margin-top: 38px; padding-top: 24px; }
 .welcome-features > div { display: flex; flex-direction: column; gap: 10px; }
 .welcome-features svg { color: var(--blue); }
@@ -99,6 +106,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .workspace-error { margin: 0 10px 8px; display: flex; align-items: center; gap: 12px; }
 .workspace-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
 .workspace-button:hover { background: var(--surface-hover); }
+.header-breadcrumb { padding: 3px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--text-secondary); font: inherit; cursor: pointer; white-space: nowrap; }
+.header-breadcrumb:hover, .header-breadcrumb:focus-visible { background: var(--surface-hover); color: var(--blue); }
 .workspace-mobile-nav { display: none; }
 .workspace-panels { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px; padding: 8px 10px 10px; gap: 10px; overflow: hidden; }
 .workspace-panels > div { min-height: 0; min-width: 0; }

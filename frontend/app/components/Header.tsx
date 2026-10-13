@@ -23,6 +23,7 @@ interface HeaderProps {
   tutorMode: TutorMode;
   onTutorModeChange: (mode: TutorMode) => void;
   onSignOut?: () => void | Promise<void>;
+  onGoHome: () => void;
 }
 
 const TUTOR_MODES: { id: TutorMode; label: string }[] = [
@@ -45,6 +46,7 @@ export default function Header({
   tutorMode,
   onTutorModeChange,
   onSignOut,
+  onGoHome,
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -85,9 +87,9 @@ export default function Header({
 
         {/* Breadcrumbs */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>CodeMentor</span>
+          <button type="button" onClick={onGoHome} className="header-breadcrumb" aria-label="Back to home" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>CodeMentor</button>
           <span style={{ color: 'var(--text-muted)', fontWeight: 300 }}>/</span>
-          <span>Repositories</span>
+          <button type="button" onClick={onGoHome} className="header-breadcrumb">Repositories</button>
           <span style={{ color: 'var(--text-muted)', fontWeight: 300 }}>/</span>
 
           {/* Repository Selector */}

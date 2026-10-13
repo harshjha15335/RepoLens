@@ -252,6 +252,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     if (activeActivityView === "graph" || activeActivityView === "interview") {
       setActiveActivityView("files");
     }
+    setMobilePanel("code");
 
     setSelectedFilePath(citation.file_path);
     setHighlightRange({
@@ -268,6 +269,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     if (activeActivityView === "graph" || activeActivityView === "interview") {
       setActiveActivityView("symbols");
     }
+    setMobilePanel("code");
     setSelectedFilePath(symbol.file_path);
     setHighlightRange({
       start: symbol.start_line,
@@ -290,6 +292,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   // Chat message sending
   const handleSendMessage = async (question: string, attachedCtx?: CodeContextAttachment, mode?: TutorMode) => {
     if (chatInFlight.current || !currentRepo || currentRepo.status?.toLowerCase() !== "ready") return false;
+    setMobilePanel("tutor");
     sessionRequestVersion.current++;
     const requestVersion = ++chatRequestVersion.current;
     const repoId = currentRepo.id;
@@ -409,7 +412,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   };
 
   // Repository Operations
-  const activateRepository = (repo: Repository) => {
+  const activateRepository = (repo: Repository | null) => {
     fileRequestVersion.current++;
     sessionRequestVersion.current++;
     chatRequestVersion.current++;
@@ -455,20 +458,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
       if (currentRepo?.id === repoId) {
         if (remaining.length > 0) activateRepository(remaining[0]);
         else {
-          fileRequestVersion.current++;
-          sessionRequestVersion.current++;
-          chatRequestVersion.current++;
-          chatInFlight.current = false;
-          setChatLoading(false);
-          setCurrentRepo(null);
-          setFiles([]);
-          setSymbols([]);
-          setSessions([]);
-          setCurrentSessionId(undefined);
-          setMessages([]);
-          setSelectedFilePath(undefined);
-          setFileContent(null);
-          setOpenTabs([]);
+          activateRepository(null);
         }
       }
     } catch (e: unknown) {
@@ -508,13 +498,18 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     }
   };
 
+  // Keep the explorer, editor, and mobile panel in sync when switching screens.
+  const navigateToView = (view: ActiveActivityView) => {
+    setActiveActivityView(view);
+    setCenterView(view === "graph" ? "graph" : "code");
+    setMobilePanel("code");
+  };
+
   // Determine what the center panel shows
   const showInterview = activeActivityView === "interview";
-  const showGraph = !showInterview && (centerView === "graph" || activeActivityView === "graph");
+  const showGraph = !showInterview && centerView === "graph";
   const returnToCode = () => {
-    setActiveActivityView("files");
-    setCenterView("code");
-    setMobilePanel("code");
+    navigateToView("files");
   };
 
   // Keep the welcome screen as the home view until the user opens a repository.
@@ -526,6 +521,8 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
           error={repositoryError}
           sampleLoading={sampleLoading}
           canOpenIDE={repositories.length > 0}
+          repositories={repositories}
+          onSelectRepository={activateRepository}
           onRetry={loadRepositories}
           onImport={() => setUploadModalOpen(true)}
           onLoadSample={handleLoadSample}
@@ -577,11 +574,12 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
           tutorMode={tutorMode}
           onTutorModeChange={setTutorMode}
           onSignOut={onSignOut}
+          onGoHome={() => activateRepository(null)}
         />
 
         <nav className="workspace-mobile-nav" aria-label="Workspace panels">
           <button aria-label="Files" title="Files" aria-pressed={mobilePanel === "explorer"} onClick={() => setMobilePanel("explorer")}><FolderTree size={18} /></button>
-          <button aria-label="Code" title="Code" aria-pressed={mobilePanel === "code"} onClick={() => setMobilePanel("code")}><Code2 size={18} /></button>
+          <button aria-label="Code" title="Code" aria-pressed={mobilePanel === "code"} onClick={returnToCode}><Code2 size={18} /></button>
           <button aria-label="Chat" title="Chat" aria-pressed={mobilePanel === "tutor"} onClick={() => setMobilePanel("tutor")}><MessageSquare size={18} /></button>
         </nav>
         {repositoryError && <div className="workspace-error" role="alert">{repositoryError} <button className="workspace-button" onClick={loadRepositories}>Retry</button></div>}
@@ -613,8 +611,8 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 loadFileContent(path);
               }}
               onSelectSymbol={handleSymbolClick}
-              onSelectSession={handleSelectSession}
-              onNewSession={handleNewSession}
+              onSelectSession={(id) => { setMobilePanel("tutor"); void handleSelectSession(id); }}
+              onNewSession={() => { setMobilePanel("tutor"); void handleNewSession(); }}
               onDeleteSession={handleDeleteSession}
               onAskQuery={(q) => handleSendMessage(q)}
               collapsed={false}
@@ -674,7 +672,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 onSendMessage={handleSendMessage}
                 isRepoReady={currentRepo?.status?.toLowerCase() === "ready"}
                 centerView={centerView}
-                onCenterViewChange={setCenterView}
+                onCenterViewChange={(view) => view === "graph" ? navigateToView("graph") : returnToCode()}
                 onOpenSettings={() => setSettingsModalOpen(true)}
                 onOpenLab={() => setLabModalOpen(true)}
                 onOpenEvaluation={() => setEvalModalOpen(true)}
@@ -701,7 +699,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
               onRemoveContext={() => setContextAttachment(null)}
               repoName={currentRepo?.name}
               isRepoReady={currentRepo?.status?.toLowerCase() === "ready"}
-              onOpenInterview={() => { setActiveActivityView("interview"); setCenterView("code"); setMobilePanel("code"); }}
+              onOpenInterview={() => navigateToView("interview")}
               sessions={sessions}
               currentSessionId={currentSessionId}
               onNewSession={handleNewSession}
@@ -726,7 +724,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
         }}
         onSelectSymbol={(sym) => handleSymbolClick(sym)}
         onSelectTutorMode={setTutorMode}
-        onNavigateView={(view) => { setActiveActivityView(view); setMobilePanel("code"); if (view === "interview") setCenterView("code"); }}
+        onNavigateView={navigateToView}
         onOpenUpload={() => setUploadModalOpen(true)}
         onOpenEvaluation={() => setEvalModalOpen(true)}
         onOpenSettings={() => setSettingsModalOpen(true)}

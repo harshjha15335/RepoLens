@@ -29,7 +29,7 @@ export default function UploadModal({
   const [tab, setTab] = useState<"zip" | "git" | "sample">("zip");
   const [file, setFile] = useState<File | null>(null);
   const [gitUrl, setGitUrl] = useState("");
-  const [branch, setBranch] = useState("main");
+  const [branch, setBranch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -288,11 +288,11 @@ export default function UploadModal({
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>
-                  Branch (Default: main)
+                  Branch (optional)
                 </label>
                 <input
                   type="text"
-                  placeholder="main"
+                  placeholder="Auto-detect default branch"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
                   style={{
