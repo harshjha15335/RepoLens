@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -67,9 +68,9 @@ class Repository(Base):
     languages = Column(JSON, default=list)
 
     # Timestamps
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
-    indexed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    indexed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     files = relationship("RepositoryFile", back_populates="repository", cascade="all, delete-orphan")
@@ -93,7 +94,7 @@ class RepositoryFile(Base):
     is_parsed = Column(Boolean, default=False)
     symbol_count = Column(Integer, default=0)
     chunk_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=utc_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     repository = relationship("Repository", back_populates="files")
     chunks = relationship("Chunk", back_populates="file", cascade="all, delete-orphan")
@@ -102,6 +103,17 @@ class RepositoryFile(Base):
         Index("ix_repository_files_repo_id", "repository_id"),
         Index("ix_repository_files_path", "repository_id", "path"),
     )
+
+
+class RepositoryArtifact(Base):
+    """Durable copy of files needed when a service instance loses its local disk."""
+    __tablename__ = "repository_artifacts"
+
+    repository_id = Column(String, ForeignKey("repositories.id", ondelete="CASCADE"), primary_key=True)
+    kind = Column(String, primary_key=True)
+    payload = Column(LargeBinary, nullable=False)
+    revision = Column(String, default=generate_uuid, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class Chunk(Base):
@@ -130,7 +142,7 @@ class Chunk(Base):
     # Embedding index position (for FAISS ID mapping)
     faiss_index = Column(Integer, nullable=True)
 
-    created_at = Column(DateTime, default=utc_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     repository = relationship("Repository", back_populates="chunks")
     file = relationship("RepositoryFile", back_populates="chunks")
@@ -187,8 +199,8 @@ class ChatSession(Base):
     repository_id = Column(String, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=True)
     tutor_mode = Column(String, default="developer")  # beginner, developer, interview, debug
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     repository = relationship("Repository", back_populates="sessions")
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan",
@@ -208,7 +220,7 @@ class ChatMessage(Base):
     content = Column(Text, nullable=False)
     citations = Column(JSON, default=list)
     retrieval_metadata = Column(JSON, default=dict)  # strategy info, latencies, etc.
-    created_at = Column(DateTime, default=utc_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     session = relationship("ChatSession", back_populates="messages")
 
@@ -234,8 +246,8 @@ class EvaluationRun(Base):
     avg_generation_latency_ms = Column(Float, nullable=True)
 
     results = Column(JSON, default=list)
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_evaluation_runs_repo_id", "repository_id"),

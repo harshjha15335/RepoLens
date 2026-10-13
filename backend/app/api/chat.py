@@ -20,6 +20,7 @@ from app.schemas.schemas import (
     SessionListResponse,
     SessionResponse,
 )
+from app.services.artifact_store import ensure_source
 from app.services.generation.service import GenerationService
 
 logger = get_logger(__name__)
@@ -43,6 +44,8 @@ async def _resolve_code_context(
         raise RepositoryValidationError("Selected code file is not indexed in this repository")
     if not repository.storage_path:
         raise RepositoryValidationError("Repository storage not found")
+
+    await ensure_source(db, repository)
 
     source_dir = (Path(repository.storage_path) / "source").resolve()
     source_path = (source_dir / context.file_path).resolve()

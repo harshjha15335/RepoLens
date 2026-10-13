@@ -11,6 +11,7 @@ from app.core.database import get_session_factory
 from app.core.errors import IndexError_
 from app.core.logging import get_logger
 from app.models.models import Chunk, GraphEdge, GraphNode
+from app.services.artifact_store import ensure_index
 from app.services.embeddings.service import EmbeddingService
 from app.services.indexing.service import IndexingService
 from app.services.reranking.service import RerankingService
@@ -178,6 +179,7 @@ class RetrievalService:
         # Load chunks from database
         factory = get_session_factory()
         async with factory() as db:
+            await ensure_index(db, repository_id)
             result = await db.execute(
                 select(Chunk)
                 .where(Chunk.repository_id == repository_id)

@@ -38,6 +38,14 @@ from app.schemas.schemas import (
     SymbolInfo,
     SymbolListResponse,
 )
+from app.services.artifact_store import (
+    GIT_METADATA,
+    SOURCE_ZIP,
+    ensure_git_metadata,
+    ensure_source,
+    ensure_upload,
+    save_file,
+)
 from app.services.ingestion.service import IngestionService, validate_git_url
 
 logger = get_logger(__name__)
@@ -129,6 +137,8 @@ async def upload_repository(
         zip_path = repo_dir / "source.zip"
         staged_path.replace(zip_path)
         repo.storage_path = str(repo_dir)
+        # A queued worker may start on another instance or after this disk is lost.
+        await save_file(db, repo.id, SOURCE_ZIP, zip_path)
         # Workers use a separate session and require a committed record.
         await db.commit()
     except BaseException:
@@ -188,6 +198,7 @@ async def import_git_repository(
     (repo_dir / GIT_SOURCE_METADATA_FILE).write_text(
         json.dumps({"branch": request.branch}), encoding="utf-8"
     )
+    await save_file(db, repo.id, GIT_METADATA, repo_dir / GIT_SOURCE_METADATA_FILE)
     await db.commit()
 
     logger.info(f"Git repository import started: {repo.name} ({repo.id})")
@@ -280,9 +291,17 @@ async def reindex_repository(
     source = repo.source_url or str(repo.storage_path)
     source_type = repo.source_type
     if source_type == "zip":
+        await ensure_upload(db, repo)
         source = str(Path(repo.storage_path) / "source.zip")
+        if not Path(source).is_file():
+            await ensure_source(db, repo)
+            if not (Path(repo.storage_path) / "source").is_dir():
+                raise RepositoryValidationError("Repository source is unavailable for reindexing")
+            source_type = "local"
+            source = str(Path(repo.storage_path) / "source")
     branch = None
     if source_type == "git":
+        await ensure_git_metadata(db, repo)
         metadata_file = Path(repo.storage_path) / GIT_SOURCE_METADATA_FILE
         if metadata_file.exists():
             branch = json.loads(metadata_file.read_text(encoding="utf-8")).get("branch")
@@ -363,6 +382,8 @@ async def get_file_content(
 
     if not repo.storage_path:
         raise RepositoryValidationError("Repository storage not found")
+
+    await ensure_source(db, repo)
 
     # Security: validate path doesn't escape repository
     source_dir = (Path(repo.storage_path) / "source").resolve()
