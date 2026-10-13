@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: repolens-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: DATA_DIR
+        value: /app/data
+      - key: DATABASE_URL
+        sync: false
+      - key: REPOLENS_ACCESS_KEY
+        sync: false
