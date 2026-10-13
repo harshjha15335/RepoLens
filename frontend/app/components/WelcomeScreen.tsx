@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Code2, FileSearch, MessageSquare, Network, RefreshCw } from "lucide-react";
+import { Repository } from "../types";
 
 interface WelcomeScreenProps {
   loading: boolean;
@@ -11,10 +12,12 @@ interface WelcomeScreenProps {
   onImport: () => void;
   onLoadSample: () => void;
   onOpenIDE: () => void;
+  repositories: Repository[];
+  onSelectRepository: (repository: Repository) => void;
   onSignOut?: () => void | Promise<void>;
 }
 
-export default function WelcomeScreen({ loading, error, sampleLoading, canOpenIDE, onRetry, onImport, onLoadSample, onOpenIDE, onSignOut }: WelcomeScreenProps) {
+export default function WelcomeScreen({ loading, error, sampleLoading, canOpenIDE, onRetry, onImport, onLoadSample, onOpenIDE, repositories, onSelectRepository, onSignOut }: WelcomeScreenProps) {
   return (
     <main className="welcome-screen">
       <section className="welcome-card" aria-labelledby="welcome-title">
@@ -42,6 +45,20 @@ export default function WelcomeScreen({ loading, error, sampleLoading, canOpenID
               </button>
             </div>
             <p className="welcome-hint" role="status">{sampleLoading ? "The sample will open once the upload is complete." : "Import a ZIP or Git URL. Or explore a sample first."}</p>
+            {repositories.length > 0 && (
+              <section className="welcome-repositories" aria-label="Your repositories">
+                <h2>Your repositories</h2>
+                <div className="welcome-repository-list">
+                  {repositories.map((repository) => (
+                    <button key={repository.id} type="button" onClick={() => onSelectRepository(repository)} className="welcome-repository">
+                      <span className="welcome-repository-name">{repository.name}</span>
+                      <span className="welcome-repository-status">{repository.status.toLowerCase() === "ready" ? `${repository.stats?.files ?? 0} files · Ready` : repository.status.replaceAll("_", " ")}</span>
+                      <ArrowUpRight size={16} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
           </>
         )}
         <div className="welcome-features">

@@ -111,7 +111,7 @@ export const api = {
     return request<Repository>("/repositories/git", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, branch: branch || "main" }),
+      body: JSON.stringify({ url, ...(branch?.trim() ? { branch: branch.trim() } : {}) }),
     });
   },
 

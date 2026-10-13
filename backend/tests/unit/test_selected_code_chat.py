@@ -109,3 +109,22 @@ async def test_generation_prioritizes_selection_and_validates_its_citation():
     context = service._build_context([selected, retrieved], budget=1)
     assert "selected actual source" in context
     assert "retrieved context" not in context
+
+
+@pytest.mark.asyncio
+async def test_generation_exposes_retrieved_source_when_model_omits_citations():
+    chunk = {
+        "chunk_id": "c1", "file_path": "src/calculator.py", "start_line": 4,
+        "end_line": 12, "content": "class Calculator: pass",
+    }
+    service = GenerationService.__new__(GenerationService)
+    service.provider = SimpleNamespace(generate=AsyncMock(return_value="Calculator is a class."))
+    service.retrieval = SimpleNamespace(search=AsyncMock(return_value={
+        "chunks": [chunk], "latency_ms": 1,
+    }))
+    service.settings = SimpleNamespace(context_token_budget=100, generation_max_tokens=200)
+
+    result = await service.generate_answer("repo", "What is Calculator?")
+
+    assert "Retrieved source to inspect: [src/calculator.py:4-12]" in result["answer"]
+    assert result["citations"][0]["file_path"] == "src/calculator.py"
