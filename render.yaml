@@ -13,7 +13,13 @@ services:
         value: local
       - key: DATA_DIR
         value: /app/data
-      - key: DATABASE_URL
-        sync: false
       - key: REPOLENS_ACCESS_KEY
+        generateValue: true
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_API_KEY
         sync: false

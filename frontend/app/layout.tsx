@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CodeMentor-RAG — Retrieval-Augmented AI Tutor for Codebase Understanding",
+  title: "RepoLens — Codebase Intelligence & AI Studio",
   description:
-    "Deep codebase intelligence powered by AST-aware Tree-sitter chunking, dense vector retrieval, lexical BM25, code knowledge graph expansion, and multi-tier AI tutoring.",
+    "Deep codebase intelligence powered by AST-aware Tree-sitter chunking, dense vector retrieval, lexical BM25, code knowledge graph expansion, in-IDE code editing, and multi-tier AI tutoring.",
 };
 
 export default function RootLayout({

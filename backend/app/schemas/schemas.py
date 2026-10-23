@@ -106,6 +106,11 @@ class FileContentResponse(BaseModel):
     total_lines: int = 0
 
 
+class UpdateFileContentRequest(BaseModel):
+    path: str = Field(..., description="File path within the repository")
+    content: str = Field(..., description="Updated file content")
+
+
 # ─── Symbol Schemas ───────────────────────────────────────────────
 
 class SymbolInfo(BaseModel):

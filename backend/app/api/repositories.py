@@ -37,6 +37,7 @@ from app.schemas.schemas import (
     RepositoryStats,
     SymbolInfo,
     SymbolListResponse,
+    UpdateFileContentRequest,
 )
 from app.services.artifact_store import (
     GIT_METADATA,
@@ -415,6 +416,59 @@ async def get_file_content(
     return FileContentResponse(
         path=path,
         content=content,
+        language=file_record.language if file_record else None,
+        total_lines=lines,
+    )
+
+
+@router.put("/{repository_id}/files/content", response_model=FileContentResponse)
+async def update_file_content(
+    repository_id: str,
+    payload: UpdateFileContentRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save updated content for a file in the repository."""
+    repo = await db.get(Repository, repository_id)
+    if not repo:
+        raise RepositoryNotFoundError(f"Repository {repository_id} not found")
+
+    if not repo.storage_path:
+        raise RepositoryValidationError("Repository storage not found")
+
+    await ensure_source(db, repo)
+
+    source_dir = (Path(repo.storage_path) / "source").resolve()
+    full_path = (source_dir / payload.path).resolve()
+    try:
+        full_path.relative_to(source_dir)
+    except ValueError:
+        raise RepositoryValidationError("Invalid file path")
+
+    if not full_path.is_file():
+        raise RepositoryNotFoundError(f"File not found: {payload.path}")
+
+    try:
+        with full_path.open("w", encoding="utf-8") as f:
+            f.write(payload.content)
+    except Exception as e:
+        raise RepositoryValidationError(f"Cannot write file: {str(e)}")
+
+    # Update repository_files record size if present
+    result = await db.execute(
+        select(RepositoryFile).where(
+            RepositoryFile.repository_id == repository_id,
+            RepositoryFile.path == payload.path,
+        )
+    )
+    file_record = result.scalar_one_or_none()
+    if file_record:
+        file_record.size_bytes = len(payload.content.encode("utf-8"))
+        await db.commit()
+
+    lines = payload.content.count("\n") + 1
+    return FileContentResponse(
+        path=payload.path,
+        content=payload.content,
         language=file_record.language if file_record else None,
         total_lines=lines,
     )

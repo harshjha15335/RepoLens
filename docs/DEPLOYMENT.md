@@ -82,6 +82,26 @@ A remote backend cannot use Ollama running on a developer's localhost. Provision
 a server-side model or configure a supported generation API. Without one, chat
 uses the application's grounded offline fallback rather than model generation.
 
+### Render Blueprint
+
+`render.yaml` defines two free web services: `repolens-api` and `repolens-web`.
+Create a Blueprint from this repository in Render. The frontend receives the
+API's public Render URL at build time for its same-origin `/api` proxy. Open the
+URL assigned to `repolens-web` after both services are healthy.
+
+Supply `DATABASE_URL` and `REPOLENS_ACCESS_KEY` when Render prompts for the
+API's secret environment variables. `DATABASE_URL` must be a SQLAlchemy
+`postgresql+asyncpg://` connection URL for the persistent Supabase Postgres
+database; use the existing least-privileged RepoLens role. The key must have
+at least 32 characters. Do not use the default SQLite URL on Render: its free
+web services lose local files on spin-down or redeploy. Repository source and
+search indexes are restored from Postgres when needed.
+
+The free web services sleep after inactivity and share a monthly instance-hour
+allowance. A wake-up can take about a minute, and an interrupted indexing job
+must be retried from the UI. Keep the API and web services on the free plan if
+paid hosting is not authorized.
+
 ## Verification status
 
 Compose configuration validation has passed. Container builds and remote

@@ -59,3 +59,13 @@ htmlcov/
 
 # Docker
 docker-compose.override.yml
+
+# Logs & temp artifacts
+*.log
+*.zip
+concurrent-repo-*/
+crash-test/
+eval-repo/
+.next-deploy-check/
+sample-repos/audit-test/
+

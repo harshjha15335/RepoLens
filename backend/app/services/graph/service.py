@@ -4,6 +4,9 @@ import re
 from collections import defaultdict
 
 from app.core.logging import get_logger
+from app.services.parsing.service import LANGUAGES, Parser
+
+logger = get_logger(__name__)
 
 logger = get_logger(__name__)
 
@@ -192,72 +195,102 @@ class GraphService:
             "edges": unique_edges,
         }
 
+    def _execute_query(self, content: str, language: str, query_str: str) -> list[tuple[str | None, str]]:
+        """Execute a tree-sitter query and return matched nodes."""
+        lang = LANGUAGES.get(language)
+        if not lang:
+            return []
+
+        parser = Parser(lang)
+        tree = parser.parse(content.encode("utf-8"))
+        query = lang.query(query_str)
+        captures = query.captures(tree.root_node)
+
+        results = []
+        capture_map = {}
+        for node, tag in captures:
+            if tag == "@receiver":
+                capture_map[node.start_byte] = (node, "receiver")
+            elif tag == "@name":
+                receiver = None
+                for start_byte, (node_r, tag_r) in capture_map.items():
+                    if node_r.end_byte <= node.start_byte:
+                        receiver = content[node_r.start_byte:node_r.end_byte]
+                name = content[node.start_byte:node.end_byte]
+                results.append((receiver, name))
+
+        return results
+
+    def _execute_query(self, content: str, language: str, query_str: str) -> list[tuple[str | None, str]]:
+        """Execute a tree-sitter query and return matched nodes."""
+        lang = LANGUAGES.get(language)
+        if not lang:
+            return []
+
+        parser = Parser(lang)
+        tree = parser.parse(content.encode("utf-8"))
+        query = lang.query(query_str)
+        captures = query.captures(tree.root_node)
+
+        results = []
+        capture_map = {}
+        for node, tag in captures:
+            if tag == "@receiver":
+                capture_map[node.start_byte] = (node, "receiver")
+            elif tag == "@name":
+                receiver = None
+                for start_byte, (node_r, tag_r) in capture_map.items():
+                    if node_r.end_byte <= node.start_byte:
+                        receiver = content[node_r.start_byte:node_r.end_byte]
+                name = content[node.start_byte:node.end_byte]
+                results.append((receiver, name))
+
+        return results
+
     def _extract_import_target(self, import_stmt: str, language: str) -> str | None:
-        """Extract the target name from an import statement."""
-        if language == "python":
-            # from module import name
-            m = re.search(r"from\s+(\S+)\s+import\s+(\S+)", import_stmt)
-            if m:
-                return m.group(2).split(",")[0].strip()
-            # import module
-            m = re.search(r"import\s+(\S+)", import_stmt)
-            if m:
-                return m.group(1).split(",")[0].split(".")[-1].strip()
+        """Extract the target name from an import statement using tree-sitter."""
+        # Since we are given the statement string, we parse just that snippet
+        query_map = {
+            "python": "(import_from_statement name: (identifier) @name) @name",
+            "javascript": "(import_statement name: (identifier) @name) @name",
+            "typescript": "(import_statement name: (identifier) @name) @name",
+            "java": "(import_declaration name: (identifier) @name) @name",
+        }
+        query = query_map.get(language)
+        if not query:
+            return None
 
-        elif language in ("javascript", "typescript"):
-            # import { Name } from 'module'
-            m = re.search(r"import\s+\{?\s*(\w+)", import_stmt)
-            if m:
-                return m.group(1)
-            # import Name from 'module'
-            m = re.search(r"import\s+(\w+)", import_stmt)
-            if m:
-                return m.group(1)
-
-        elif language == "java":
-            m = re.search(r"import\s+[\w.]+\.(\w+)", import_stmt)
-            if m:
-                return m.group(1)
-
-        return None
+        results = self._execute_query(import_stmt, language, query)
+        return results[0][1] if results else None
 
     def _extract_calls(self, content: str, language: str) -> list[tuple[str | None, str]]:
-        """Extract function/method call names from code content."""
-        # Simple regex-based call extraction
-        # Matches functionName(, self.method(, and obj.method(.
-        calls = set()
-        pattern = re.compile(r'(?<![.\w])(?:(\w+)\s*\.\s*)?(\w+)\s*\(', re.MULTILINE)
+        """Extract function/method call names from code content using tree-sitter."""
+        query_map = {
+            "python": "(call function: (identifier) @name) @name | (call function: (attribute attribute: (identifier) @receiver function: (identifier) @name))",
+            "javascript": "(call_expression function: (identifier) @name) @name | (call_expression function: (member_expression object: (identifier) @receiver property: (identifier) @name))",
+            "typescript": "(call_expression function: (identifier) @name) @name | (call_expression function: (member_expression object: (identifier) @receiver property: (identifier) @name))",
+            "java": "(method_invocation name: (identifier) @name) @name | (method_invocation object: (identifier) @receiver name: (identifier) @name)",
+        }
+        query = query_map.get(language)
+        if not query:
+            return []
 
-        for m in pattern.finditer(content):
-            receiver, name = m.groups()
-            # Filter out language keywords and builtins
-            if name not in _KEYWORDS and len(name) > 1:
-                calls.add((receiver, name))
-
-        return list(calls)
+        return self._execute_query(content, language, query)
 
     def _extract_bases(self, content: str, language: str) -> list[str]:
-        """Extract base/parent class names."""
-        bases = []
+        """Extract base/parent class names using tree-sitter."""
+        query_map = {
+            "python": "(class_definition superclasses: (argument_list (identifier) @base))",
+            "java": "(class_declaration superclass: (type_identifier) @base)",
+            "typescript": "(class_declaration superclass: (type_identifier) @base)",
+            "javascript": "(class_declaration superclass: (type_identifier) @base)",
+        }
+        query = query_map.get(language)
+        if not query:
+            return []
 
-        if language == "python":
-            m = re.search(r"class\s+\w+\s*\(([^)]+)\)", content)
-            if m:
-                for base in m.group(1).split(","):
-                    base = base.strip()
-                    if base and base not in ("object", "ABC"):
-                        bases.append(base)
-
-        elif language in ("java", "typescript", "javascript"):
-            m = re.search(r"extends\s+(\w+)", content)
-            if m:
-                bases.append(m.group(1))
-            m = re.search(r"implements\s+([\w,\s]+)", content)
-            if m:
-                for impl in m.group(1).split(","):
-                    bases.append(impl.strip())
-
-        return bases
+        results = self._execute_query(content, language, query)
+        return [res[1] for res in results]
 
 
 # Common keywords to filter from call extraction

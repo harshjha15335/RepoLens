@@ -51,7 +51,12 @@ def _same_origin(request: Request) -> bool:
     if not origin:
         return True  # Non-browser API clients can use the owner bearer key.
     host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
-    return urlsplit(origin).netloc.lower() == host.lower()
+    origin_host = urlsplit(origin).netloc.lower()
+    if origin_host == host.lower():
+        return True
+    if origin_host.endswith(".trycloudflare.com") or origin_host.startswith("localhost") or origin_host.startswith("127.0.0.1"):
+        return True
+    return False
 
 
 class LoginRequest(BaseModel):

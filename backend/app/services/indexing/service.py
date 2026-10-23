@@ -3,7 +3,7 @@
 import json
 import math
 import re
-from collections import Counter
+from collections import Counter, OrderedDict
 
 import numpy as np
 
@@ -34,6 +34,7 @@ class BM25Index:
         self.tf: list[dict[str, int]] = []
         self.chunk_ids: list[str] = []
         self.documents: list[dict] = []
+        self.inverted_index: dict[str, list[int]] = {}
 
     def build(self, chunks: list[dict]):
         """Build BM25 index from chunks."""
@@ -50,8 +51,9 @@ class BM25Index:
         self.doc_lens = []
         self.tf = []
         self.chunk_ids = []
+        self.inverted_index = {}
 
-        for document in documents:
+        for i, document in enumerate(documents):
             tokens = document["tokens"]
             self.chunk_ids.append(document["chunk_id"])
 
@@ -61,6 +63,9 @@ class BM25Index:
 
             for term in set(tokens):
                 self.doc_freqs[term] = self.doc_freqs.get(term, 0) + 1
+                if term not in self.inverted_index:
+                    self.inverted_index[term] = []
+                self.inverted_index[term].append(i)
 
         self.avg_dl = sum(self.doc_lens) / self.n_docs if self.n_docs > 0 else 0
 
@@ -68,8 +73,13 @@ class BM25Index:
         """Search the BM25 index. Returns (doc_index, score) tuples."""
         query_tokens = self._tokenize_query(query)
 
+        candidate_docs = set()
+        for term in query_tokens:
+            if term in self.inverted_index:
+                candidate_docs.update(self.inverted_index[term])
+
         scores = []
-        for i in range(self.n_docs):
+        for i in candidate_docs:
             score = 0.0
             dl = self.doc_lens[i]
             tf = self.tf[i]
@@ -187,6 +197,13 @@ class BM25Index:
 class IndexingService:
     """Manages FAISS and BM25 indexes for repositories."""
 
+    def __init__(self):
+        self.settings = get_settings()
+        self.cache_size = self.settings.index_cache_size
+        self._faiss_cache: OrderedDict[str, any] = OrderedDict()
+        self._bm25_cache: OrderedDict[str, BM25Index] = OrderedDict()
+        self._metadata_cache: OrderedDict[str, dict] = OrderedDict()
+
     async def build_indexes(
         self,
         repository_id: str,
@@ -195,6 +212,11 @@ class IndexingService:
         embedding_metadata: dict,
     ):
         """Build both FAISS and BM25 indexes."""
+        # Invalidate cache for this repository
+        self._faiss_cache.pop(repository_id, None)
+        self._bm25_cache.pop(repository_id, None)
+        self._metadata_cache.pop(repository_id, None)
+
         settings = get_settings()
         index_dir = settings.indexes_path / repository_id
         index_dir.mkdir(parents=True, exist_ok=True)
@@ -255,6 +277,10 @@ class IndexingService:
 
     def load_embedding_metadata(self, repository_id: str) -> dict:
         """Read the actual indexed vector identity; legacy settings are insufficient."""
+        if repository_id in self._metadata_cache:
+            self._metadata_cache.move_to_end(repository_id)
+            return self._metadata_cache[repository_id]
+
         path = get_settings().indexes_path / repository_id / "metadata.json"
         try:
             with open(path, encoding="utf-8") as file:
@@ -262,6 +288,13 @@ class IndexingService:
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise IndexError_("Dense index embedding metadata is missing or invalid. Reindex this repository.") from exc
         self._validate_embedding_metadata(metadata)
+
+        # Cache the result
+        self._metadata_cache[repository_id] = metadata
+        self._metadata_cache.move_to_end(repository_id)
+        if len(self._metadata_cache) > self.cache_size:
+            self._metadata_cache.popitem(last=False)
+
         return metadata
 
     def _build_faiss_index(self, embeddings: list[list[float]], path: str):
@@ -283,26 +316,46 @@ class IndexingService:
         if not FAISS_AVAILABLE:
             return None
 
+        if repository_id in self._faiss_cache:
+            self._faiss_cache.move_to_end(repository_id)
+            return self._faiss_cache[repository_id]
+
         settings = get_settings()
         path = settings.indexes_path / repository_id / "faiss.index"
         if not path.exists():
             return None
 
         try:
-            return faiss.read_index(str(path))
+            index = faiss.read_index(str(path))
+            # Cache the result
+            self._faiss_cache[repository_id] = index
+            self._faiss_cache.move_to_end(repository_id)
+            if len(self._faiss_cache) > self.cache_size:
+                self._faiss_cache.popitem(last=False)
+            return index
         except Exception as e:
             logger.error(f"Failed to load FAISS index: {e}")
             return None
 
     def load_bm25_index(self, repository_id: str) -> BM25Index | None:
         """Load a BM25 index for a repository."""
+        if repository_id in self._bm25_cache:
+            self._bm25_cache.move_to_end(repository_id)
+            return self._bm25_cache[repository_id]
+
         settings = get_settings()
         path = settings.indexes_path / repository_id / "bm25.index"
         if not path.exists():
             return None
 
         try:
-            return BM25Index.load(str(path))
+            index = BM25Index.load(str(path))
+            # Cache the result
+            self._bm25_cache[repository_id] = index
+            self._bm25_cache.move_to_end(repository_id)
+            if len(self._bm25_cache) > self.cache_size:
+                self._bm25_cache.popitem(last=False)
+            return index
         except IndexError_:
             raise
         except Exception as e:

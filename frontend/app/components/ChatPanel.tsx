@@ -284,7 +284,7 @@ export default function ChatPanel({
               <Bot style={{ width: 22, height: 22, color: 'var(--blue)' }} />
             </div>
             <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-              CodeMentor AI Tutor
+              RepoLens AI Tutor
             </h3>
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6, textAlign: 'center' }}>
@@ -340,7 +340,7 @@ export default function ChatPanel({
                       marginBottom: 6, fontSize: 11, color: 'var(--text-muted)',
                     }}>
                       <span style={{ fontWeight: 600, color: isUser ? 'var(--text-secondary)' : 'var(--blue)', fontSize: 11 }}>
-                        {isUser ? "You" : "CodeMentor"}
+                        {isUser ? "You" : "RepoLens"}
                       </span>
                       {!isUser && (
                         <span style={{
@@ -561,7 +561,7 @@ export default function ChatPanel({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={!isRepoReady || loading}
-              placeholder={!isRepoReady ? "Waiting for indexing..." : "Ask CodeMentor..."}
+              placeholder={!isRepoReady ? "Waiting for indexing..." : "Ask RepoLens..."}
               style={{
                 flex: 1, border: 'none', outline: 'none',
                 background: 'transparent', resize: 'none',

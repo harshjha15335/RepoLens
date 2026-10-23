@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Repository, TutorMode } from "../types";
+import RepoLensLogo from "./RepoLensLogo";
 
 interface HeaderProps {
   repositories: Repository[];
@@ -74,20 +75,11 @@ export default function Header({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {onSignOut && <button type="button" onClick={() => void onSignOut()} style={{ padding: '6px 10px', borderRadius: 'var(--radius-button)', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', cursor: 'pointer' }}>Sign out</button>}
         {/* Brand Mark */}
-        <div style={{
-          width: 28, height: 28, borderRadius: 8,
-          background: 'linear-gradient(135deg, #1473e6 0%, #0ea5e9 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
-          </svg>
-        </div>
+        <RepoLensLogo size={28} />
 
         {/* Breadcrumbs */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
-          <button type="button" onClick={onGoHome} className="header-breadcrumb" aria-label="Back to home" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>CodeMentor</button>
+          <button type="button" onClick={onGoHome} className="header-breadcrumb" aria-label="Back to home" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>RepoLens</button>
           <span style={{ color: 'var(--text-muted)', fontWeight: 300 }}>/</span>
           <button type="button" onClick={onGoHome} className="header-breadcrumb">Repositories</button>
           <span style={{ color: 'var(--text-muted)', fontWeight: 300 }}>/</span>

@@ -136,7 +136,7 @@ class OllamaProvider(LLMProvider):
         import httpx
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=3.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(240.0, connect=10.0)) as client:
                 response = await client.post(
                     f"{self.base_url}/api/chat",
                     json={
@@ -146,6 +146,7 @@ class OllamaProvider(LLMProvider):
                         "options": {
                             "num_predict": max_tokens,
                             "temperature": temperature,
+                            "num_thread": 8,
                         },
                     },
                 )
@@ -164,7 +165,7 @@ class OllamaProvider(LLMProvider):
         import httpx
 
         try:
-            async with httpx.AsyncClient(timeout=120) as client:
+            async with httpx.AsyncClient(timeout=240) as client:
                 async with client.stream(
                     "POST",
                     f"{self.base_url}/api/chat",
@@ -175,6 +176,7 @@ class OllamaProvider(LLMProvider):
                         "options": {
                             "num_predict": max_tokens,
                             "temperature": temperature,
+                            "num_thread": 8,
                         },
                     },
                 ) as response:

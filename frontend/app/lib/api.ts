@@ -137,6 +137,14 @@ export const api = {
     return request<FileContent>(`/repositories/${repoId}/files/content?path=${encoded}`);
   },
 
+  async updateFileContent(repoId: string, path: string, content: string): Promise<FileContent> {
+    return request<FileContent>(`/repositories/${repoId}/files/content`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, content }),
+    });
+  },
+
   // Symbols
   async getSymbols(repoId: string, symbolType?: string): Promise<SymbolInfo[]> {
     const query = symbolType ? `?symbol_type=${encodeURIComponent(symbolType)}` : "";

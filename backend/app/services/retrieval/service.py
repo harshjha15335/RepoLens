@@ -478,12 +478,23 @@ class RetrievalService:
 
         MMR = λ * sim(q, d) - (1-λ) * max(sim(d, d_selected))
 
-        Uses a simplified text overlap metric when embeddings aren't readily available.
+        Uses cosine similarity of embeddings to detect semantic redundancy.
         """
         if len(chunks) <= top_k:
             return chunks
 
+        # Batch embed all candidate chunks to avoid N+1 API calls
+        chunk_texts = [c.get("content", "") for c in chunks]
+        embeddings = await self.embedding_service.embed_documents(chunk_texts)
+
+        # Map chunk to its embedding for fast lookup
+        chunk_embeddings = {
+            chunks[i]["chunk_id"]: np.array(embeddings[i])
+            for i in range(len(chunks))
+        }
+
         selected = [chunks[0]]
+        selected_embeddings = [chunk_embeddings[chunks[0]["chunk_id"]]]
         remaining = list(chunks[1:])
 
         while len(selected) < top_k and remaining:
@@ -494,10 +505,14 @@ class RetrievalService:
                 # Relevance score (original retrieval score)
                 relevance = candidate.get("score", 0)
 
-                # Diversity: max similarity with already selected
+                # Diversity: max cosine similarity with already selected
+                cand_emb = chunk_embeddings[candidate["chunk_id"]]
                 max_sim = 0
-                for sel in selected:
-                    sim = self._text_similarity(candidate, sel)
+                for sel_emb in selected_embeddings:
+                    # Cosine similarity: (a . b) / (||a|| * ||b||)
+                    sim = np.dot(cand_emb, sel_emb) / (
+                        np.linalg.norm(cand_emb) * np.linalg.norm(sel_emb) + 1e-9
+                    )
                     max_sim = max(max_sim, sim)
 
                 # MMR score
@@ -507,7 +522,9 @@ class RetrievalService:
                     best_score = mmr_score
                     best_idx = i
 
-            selected.append(remaining.pop(best_idx))
+            best_chunk = remaining.pop(best_idx)
+            selected.append(best_chunk)
+            selected_embeddings.append(chunk_embeddings[best_chunk["chunk_id"]])
 
         return selected
 

@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     mmr_enabled: bool = Field(default=True, alias="MMR_ENABLED")
     mmr_lambda: float = Field(default=0.7, alias="MMR_LAMBDA")
     rerank_enabled: bool = Field(default=False, alias="RERANK_ENABLED")
+    index_cache_size: int = Field(default=10, ge=1, alias="INDEX_CACHE_SIZE")
+
 
     # Generation Configuration
     context_token_budget: int = Field(default=4096, alias="CONTEXT_TOKEN_BUDGET")
@@ -72,7 +74,7 @@ class Settings(BaseSettings):
 
     # Ollama
     ollama_base_url: str = Field(
-        default="http://localhost:11434", alias="OLLAMA_BASE_URL"
+        default="http://127.0.0.1:11434", alias="OLLAMA_BASE_URL"
     )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore", "populate_by_name": True}

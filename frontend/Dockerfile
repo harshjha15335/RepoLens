@@ -17,7 +17,9 @@ COPY frontend/ ./
 COPY sample-repos/calculator.zip ./sample-repos/calculator.zip
 
 ARG NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
+ARG BACKEND_URL
 ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+ENV BACKEND_URL=${BACKEND_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

@@ -277,7 +277,7 @@ export default function CommandPalette({
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
                       <span>
-                        Ask CodeMentor: &quot;<strong>{query}</strong>&quot;
+                        Ask RepoLens: &quot;<strong>{query}</strong>&quot;
                       </span>
                     </div>
                     <ArrowRight className="w-3.5 h-3.5 shrink-0 opacity-80" />

@@ -16,32 +16,25 @@ export default function AccessGate({ children }: AccessGateProps) {
   const [accessKey, setAccessKey] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const checkStatus = useCallback(async (signal?: AbortSignal) => {
-    if (!signal) {
-      setChecking(true);
-      setError(null);
-    }
+  const checkStatus = useCallback(async () => {
+    setChecking(true);
+    setError(null);
     try {
-      const response = await fetch("/api/auth/status", { credentials: "same-origin", signal });
+      const response = await fetch("/api/auth/status", { credentials: "same-origin" });
       const status = await response.json().catch(() => ({})) as Partial<AuthStatus> & { error?: string };
       if (!response.ok) throw new Error(status.error || `Could not check sign-in status (HTTP ${response.status}).`);
       setConfigured(Boolean(status.configured));
       setAuthenticated(Boolean(status.authenticated && status.configured));
     } catch (cause) {
-      if (cause instanceof DOMException && cause.name === "AbortError") return;
       setError(cause instanceof Error ? cause.message : "Could not check sign-in status.");
       setAuthenticated(false);
     } finally {
-      if (!signal?.aborted) setChecking(false);
+      setChecking(false);
     }
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void Promise.resolve().then(() => {
-      if (!controller.signal.aborted) return checkStatus(controller.signal);
-    });
-    return () => controller.abort();
+    void checkStatus();
   }, [checkStatus]);
 
   useEffect(() => {

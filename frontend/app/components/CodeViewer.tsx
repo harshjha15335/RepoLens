@@ -14,6 +14,9 @@ import {
   Code2,
   Layers,
   Settings,
+  Pencil,
+  Save,
+  AlertCircle,
 } from "lucide-react";
 import { FileContent, CodeContextAttachment, TutorMode } from "../types";
 
@@ -37,6 +40,7 @@ interface CodeViewerProps {
   onOpenSettings?: () => void;
   onOpenLab?: () => void;
   onOpenEvaluation?: () => void;
+  onSaveFile?: (path: string, content: string) => Promise<boolean>;
 }
 
 // Syntax highlighting rules matching the reference colorful IDE screenshot
@@ -123,13 +127,103 @@ export default function CodeViewer({
   onOpenSettings,
   onOpenLab,
   onOpenEvaluation,
+  onSaveFile,
 }: CodeViewerProps) {
   const [copied, setCopied] = useState(false);
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; text: string; filePath: string } | null>(null);
   const [askInput, setAskInput] = useState("");
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const editorGutterRef = useRef<HTMLDivElement>(null);
+  const editorTextareaRef = useRef<HTMLTextAreaElement>(null);
   const lineRefs = useRef<{ [line: number]: HTMLDivElement | null }>({});
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync edit content when fileContent changes
+  useEffect(() => {
+    if (fileContent) {
+      setEditContent(fileContent.content);
+      setSaveStatus("idle");
+      setSaveError(null);
+    } else {
+      setEditContent("");
+      setIsEditing(false);
+    }
+  }, [fileContent?.path, fileContent?.content]);
+
+  const hasUnsavedChanges = isEditing && Boolean(fileContent) && editContent !== fileContent?.content;
+
+  const handleStartEdit = () => {
+    if (!fileContent) return;
+    setEditContent(fileContent.content);
+    setIsEditing(true);
+    setSaveStatus("idle");
+    setSaveError(null);
+    setTimeout(() => {
+      editorTextareaRef.current?.focus();
+    }, 50);
+  };
+
+  const handleCancelEdit = () => {
+    if (hasUnsavedChanges) {
+      if (!window.confirm("You have unsaved changes. Discard them?")) return;
+    }
+    if (fileContent) {
+      setEditContent(fileContent.content);
+    }
+    setIsEditing(false);
+    setSaveStatus("idle");
+    setSaveError(null);
+  };
+
+  const handleSave = async () => {
+    if (!fileContent || !onSaveFile || isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const ok = await onSaveFile(fileContent.path, editContent);
+      if (ok) {
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 2500);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save file";
+      setSaveError(msg);
+      setSaveStatus("error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      void handleSave();
+      return;
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const target = e.currentTarget;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const val = target.value;
+      const indent = "  ";
+      const newVal = val.substring(0, start) + indent + val.substring(end);
+      setEditContent(newVal);
+      requestAnimationFrame(() => {
+        target.selectionStart = target.selectionEnd = start + indent.length;
+      });
+    }
+    if (e.key === "Escape") {
+      handleCancelEdit();
+    }
+  };
+
+  const editLines = editContent ? editContent.split("\n") : [""];
 
   // Auto-scroll to highlighted line range
   useEffect(() => {
@@ -444,21 +538,217 @@ export default function CodeViewer({
           </button>
         </div>
 
-        {/* Right: Status dot */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)" }}>
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: isReady ? "var(--green)" : isIndexing ? "var(--orange)" : isFailed ? "var(--red)" : "var(--text-muted)",
-              display: "inline-block",
-            }}
-            className={isIndexing ? "pulse-ring" : ""}
-          />
-          <span>
-            {isReady ? "Ready" : isIndexing ? "Indexing..." : isFailed ? "Failed" : "Idle"}
-          </span>
+        {/* Right: Actions (Save, Cancel, Edit, Copy, Download) + Status */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {fileContent && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {/* Edit / Save / Cancel Buttons */}
+              {onSaveFile && (
+                <>
+                  {!isEditing ? (
+                    <button
+                      onClick={handleStartEdit}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        background: "var(--blue)",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#ffffff",
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        boxShadow: "0 1px 3px rgba(20,115,230,0.25)",
+                        transition: "all 80ms",
+                      }}
+                      title="Edit code in IDE"
+                    >
+                      <Pencil style={{ width: 13, height: 13 }} />
+                      <span>Edit</span>
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {hasUnsavedChanges && (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 11,
+                            color: "#d97706",
+                            fontWeight: 500,
+                          }}
+                        >
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
+                          Unsaved
+                        </span>
+                      )}
+
+                      {saveStatus === "error" && saveError && (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 11,
+                            color: "var(--red)",
+                            fontWeight: 500,
+                          }}
+                          title={saveError}
+                        >
+                          <AlertCircle style={{ width: 13, height: 13 }} />
+                          Failed
+                        </span>
+                      )}
+
+                      <button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 5,
+                          background: saveStatus === "saved" ? "var(--green)" : "var(--blue)",
+                          border: "none",
+                          cursor: isSaving ? "not-allowed" : "pointer",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#ffffff",
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          boxShadow: "0 1px 4px rgba(20,115,230,0.25)",
+                          transition: "all 120ms",
+                        }}
+                        title="Save changes (Ctrl+S)"
+                      >
+                        {isSaving ? (
+                          <>
+                            <div
+                              style={{
+                                width: 12,
+                                height: 12,
+                                border: "2px solid #fff",
+                                borderTopColor: "transparent",
+                                borderRadius: "50%",
+                              }}
+                              className="spinner"
+                            />
+                            <span>Saving...</span>
+                          </>
+                        ) : saveStatus === "saved" ? (
+                          <>
+                            <Check style={{ width: 13, height: 13 }} />
+                            <span>Saved!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save style={{ width: 13, height: 13 }} />
+                            <span>Save (Ctrl+S)</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={handleCancelEdit}
+                        disabled={isSaving}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          background: "transparent",
+                          border: "1px solid var(--border)",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: "var(--text-secondary)",
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          transition: "all 80ms",
+                        }}
+                        title="Cancel editing"
+                      >
+                        <X style={{ width: 13, height: 13 }} />
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Copy Button */}
+              <button
+                onClick={handleCopy}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  color: "var(--text-secondary)",
+                  borderRadius: 6,
+                  transition: "all 80ms",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+                title="Copy code"
+              >
+                {copied ? (
+                  <Check style={{ width: 14, height: 14, color: "var(--green)" }} />
+                ) : (
+                  <Copy style={{ width: 14, height: 14 }} />
+                )}
+              </button>
+
+              {/* Download Button */}
+              <button
+                onClick={handleDownload}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  color: "var(--text-secondary)",
+                  borderRadius: 6,
+                  transition: "all 80ms",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--blue)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+                title="Download file"
+              >
+                <Download style={{ width: 14, height: 14 }} />
+              </button>
+
+              <div style={{ width: 1, height: 16, background: "var(--border)", margin: "0 2px" }} />
+            </div>
+          )}
+
+          {/* Status dot */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)" }}>
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: isReady ? "var(--green)" : isIndexing ? "var(--orange)" : isFailed ? "var(--red)" : "var(--text-muted)",
+                display: "inline-block",
+              }}
+              className={isIndexing ? "pulse-ring" : ""}
+            />
+            <span>
+              {isReady ? "Ready" : isIndexing ? "Indexing..." : isFailed ? "Failed" : "Idle"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -528,61 +818,6 @@ export default function CodeViewer({
             })
           )}
         </div>
-
-        {/* File Actions on Right (Code icon, Copy, Download) */}
-        {fileContent && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <button
-              onClick={handleCopy}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 12,
-                color: "var(--text-secondary)",
-                padding: "4px 6px",
-                borderRadius: 6,
-                transition: "all 80ms",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-              title="Copy code"
-            >
-              {copied ? (
-                <Check style={{ width: 14, height: 14, color: "var(--green)" }} />
-              ) : (
-                <Copy style={{ width: 14, height: 14 }} />
-              )}
-            </button>
-
-            <button
-              onClick={handleDownload}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 500,
-                color: "var(--text-primary)",
-                padding: "4px 6px",
-                borderRadius: 6,
-                transition: "all 80ms",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--blue)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
-              title="Download file"
-            >
-              <Download style={{ width: 14, height: 14 }} />
-              <span>Download</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ─── 3. SELECTION ACTION BAR ─── */}
@@ -719,6 +954,76 @@ export default function CodeViewer({
           <p style={{ fontSize: 12, maxWidth: 320, lineHeight: 1.5 }}>
             Select a file from the explorer on the left or click a citation chip to view source code.
           </p>
+        </div>
+      ) : isEditing ? (
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            overflow: "hidden",
+            position: "relative",
+            background: "var(--surface)",
+          }}
+        >
+          {/* Synchronized Line Numbers Gutter */}
+          <div
+            ref={editorGutterRef}
+            style={{
+              width: 52,
+              padding: "12px 18px 80px 0",
+              textAlign: "right",
+              userSelect: "none",
+              color: "#a8a8a8",
+              fontFamily: "var(--font-mono)",
+              fontSize,
+              lineHeight: 1.8,
+              borderRight: "1px solid var(--border)",
+              background: "var(--surface)",
+              overflow: "hidden",
+              flexShrink: 0,
+            }}
+          >
+            {editLines.map((_, i) => (
+              <div key={i + 1}>{i + 1}</div>
+            ))}
+          </div>
+
+          {/* Interactive Code Editor Textarea */}
+          <textarea
+            ref={editorTextareaRef}
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            onKeyDown={handleEditorKeyDown}
+            onScroll={(e) => {
+              if (editorGutterRef.current) {
+                editorGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+              }
+            }}
+            placeholder="Type code here..."
+            spellCheck={false}
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
+            style={{
+              flex: 1,
+              height: "100%",
+              padding: "12px 24px 80px 14px",
+              margin: 0,
+              border: "none",
+              outline: "none",
+              resize: "none",
+              background: "transparent",
+              color: "var(--text-primary)",
+              fontFamily: "var(--font-mono)",
+              fontSize,
+              lineHeight: 1.8,
+              whiteSpace: "pre",
+              overflowWrap: "normal",
+              overflowX: "auto",
+              overflowY: "auto",
+              tabSize: 2,
+            }}
+          />
         </div>
       ) : (
         <div

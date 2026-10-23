@@ -246,6 +246,19 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     }
   };
 
+  // In-IDE code editing save handler
+  const handleSaveFile = async (filePath: string, newContent: string): Promise<boolean> => {
+    if (!currentRepoId) return false;
+    try {
+      const updated = await api.updateFileContent(currentRepoId, filePath, newContent);
+      setFileContent(updated);
+      return true;
+    } catch (err) {
+      console.error("Failed to save file content:", err);
+      throw err;
+    }
+  };
+
   // Citation click: opens file, scrolls to lines, highlights with pulse
   const handleCitationClick = (citation: Citation) => {
     if (centerView !== "code") setCenterView("code");
@@ -676,6 +689,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 onOpenSettings={() => setSettingsModalOpen(true)}
                 onOpenLab={() => setLabModalOpen(true)}
                 onOpenEvaluation={() => setEvalModalOpen(true)}
+                onSaveFile={handleSaveFile}
               />
             )}
           </div>

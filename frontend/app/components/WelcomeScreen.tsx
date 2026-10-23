@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, Code2, FileSearch, MessageSquare, Network, RefreshCw } from "lucide-react";
 import { Repository } from "../types";
+import RepoLensLogo from "./RepoLensLogo";
 
 interface WelcomeScreenProps {
   loading: boolean;
@@ -22,7 +23,7 @@ export default function WelcomeScreen({ loading, error, sampleLoading, canOpenID
     <main className="welcome-screen">
       <section className="welcome-card" aria-labelledby="welcome-title">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div className="welcome-brand" style={{ marginBottom: 0 }}><Code2 size={22} aria-hidden="true" /> CodeMentor-RAG</div>
+          <div className="welcome-brand" style={{ marginBottom: 0 }}><RepoLensLogo size={24} aria-hidden="true" /> RepoLens</div>
           {onSignOut && <button className="workspace-button" onClick={() => void onSignOut()}>Sign out</button>}
         </div>
         <span className="welcome-eyebrow">YOUR CODEBASE, EXPLAINED</span>

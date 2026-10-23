@@ -41,6 +41,14 @@ async def lifespan(app: FastAPI):
     await recover_interrupted_jobs()
     logger.info("Database initialized")
 
+    # Pre-warm embedding service so user queries don't incur model load delay
+    try:
+        from app.services.embeddings.service import EmbeddingService
+        await EmbeddingService().embed_query("warmup")
+        logger.info("Embedding service pre-warmed")
+    except Exception as e:
+        logger.warning(f"Embedding pre-warm skipped: {e}")
+
     yield
 
     # Cleanup
