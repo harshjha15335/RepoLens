@@ -13,6 +13,10 @@ import {
   Maximize2,
   GitFork,
   Compass,
+  X,
+  Info,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import { GraphResponse, GraphNodeData, CallFlowItem, Citation } from "../types";
 import { api } from "../lib/api";
@@ -30,8 +34,8 @@ interface NodePosition {
   vy: number;
 }
 
-const NODE_WIDTH = 170;
-const NODE_HEIGHT = 44;
+const NODE_WIDTH = 154;
+const NODE_HEIGHT = 42;
 
 export default function GraphView({ repositoryId, onInspectNode, onBackToCode }: GraphViewProps) {
   const [tab, setTab] = useState<"visual" | "cards" | "call_flow">("visual");
@@ -40,6 +44,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string>("all");
   const [edgeTypeFilter, setEdgeTypeFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,41 +116,41 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
     });
   }, [graphData, visibleNodeIds, edgeTypeFilter]);
 
-  // Compute force-directed positions when nodes change
+  // Compute force-directed positions with Hooke's spring & hard collision separation
   useEffect(() => {
     if (filteredNodes.length === 0) {
       setNodePositions(new Map());
       return;
     }
 
-    const width = containerRef.current?.clientWidth || 900;
+    const width = containerRef.current?.clientWidth || 800;
     const height = containerRef.current?.clientHeight || 600;
     const cx = width / 2;
     const cy = height / 2;
 
     const positions = new Map<string, NodePosition>();
     const n = filteredNodes.length;
-    const radius = Math.min(width, height) * 0.38;
 
+    // Distribute initially in a clean circular ring
     filteredNodes.forEach((node, i) => {
       const angle = (i / n) * 2 * Math.PI;
-      const r = radius * (0.65 + 0.35 * ((i % 4) / 3));
+      const initialR = Math.max(160, Math.min(width, height) * 0.35);
       positions.set(node.id, {
-        x: cx + r * Math.cos(angle) + (Math.sin(i * 3) * 30),
-        y: cy + r * Math.sin(angle) + (Math.cos(i * 3) * 30),
+        x: cx + initialR * Math.cos(angle),
+        y: cy + initialR * Math.sin(angle),
         vx: 0,
         vy: 0,
       });
     });
 
-    const k = Math.max(140, Math.sqrt((width * height) / Math.max(n, 1)) * 0.75);
     const nodeIds = filteredNodes.map((node) => node.id);
+    const TARGET_DIST = 185;
 
-    // Iterative spring simulation
-    for (let iter = 0; iter < 70; iter++) {
-      const temp = (1 - iter / 70) * 0.85;
+    // 85 iterations of Hooke's spring relaxation + box collision
+    for (let iter = 0; iter < 85; iter++) {
+      const temp = (1 - iter / 85) * 0.9;
 
-      // Repulsion between all node pairs
+      // 1. Pairwise repulsion & hard box collision
       for (let i = 0; i < n; i++) {
         const id1 = nodeIds[i];
         const p1 = positions.get(id1)!;
@@ -155,19 +160,34 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
           const dx = p1.x - p2.x;
           const dy = p1.y - p2.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          if (dist < 420) {
-            const force = (k * k) / dist;
-            const fx = (dx / dist) * force;
-            const fy = (dy / dist) * force;
-            p1.vx += fx;
-            p1.vy += fy;
-            p2.vx -= fx;
-            p2.vy -= fy;
+
+          // Coulomb repulsion
+          if (dist < 400) {
+            const force = 30000 / (dist * dist);
+            p1.vx += (dx / dist) * force * 15;
+            p2.vx -= (dx / dist) * force * 15;
+          }
+
+          // Hard rectangular box anti-overlap separation
+          const minSepX = NODE_WIDTH + 32;
+          const minSepY = NODE_HEIGHT + 24;
+          if (Math.abs(dx) < minSepX && Math.abs(dy) < minSepY) {
+            const overlapX = minSepX - Math.abs(dx);
+            const overlapY = minSepY - Math.abs(dy);
+            if (overlapX < overlapY) {
+              const sign = dx >= 0 ? 1 : -1;
+              p1.vx += sign * overlapX * 0.6;
+              p2.vx -= sign * overlapX * 0.6;
+            } else {
+              const sign = dy >= 0 ? 1 : -1;
+              p1.vy += sign * overlapY * 0.6;
+              p2.vy -= sign * overlapY * 0.6;
+            }
           }
         }
       }
 
-      // Attraction along connected edges
+      // 2. Hooke's Law spring along connected edges (pushes if too close, pulls if too far)
       filteredEdges.forEach((edge) => {
         const p1 = positions.get(edge.source);
         const p2 = positions.get(edge.target);
@@ -175,36 +195,58 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = (dist * dist) / k;
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        p1.vx += fx;
-        p1.vy += fy;
-        p2.vx -= fx;
-        p2.vy -= fy;
+        const displacement = dist - TARGET_DIST;
+        const force = displacement * 0.045;
+        p1.vx += (dx / dist) * force;
+        p1.vy += (dy / dist) * force;
+        p2.vx -= (dx / dist) * force;
+        p2.vy -= (dy / dist) * force;
       });
 
-      // Centering gravity & damping update
+      // 3. Centering gravity & damping update
       filteredNodes.forEach((node) => {
         const p = positions.get(node.id)!;
-        p.vx += (cx - p.x) * 0.035;
-        p.vy += (cy - p.y) * 0.035;
+        p.vx += (cx - p.x) * 0.025;
+        p.vy += (cy - p.y) * 0.025;
 
-        p.x += Math.max(-45, Math.min(45, p.vx * 0.03 * temp));
-        p.y += Math.max(-45, Math.min(45, p.vy * 0.03 * temp));
-        p.vx *= 0.55;
-        p.vy *= 0.55;
+        p.x += Math.max(-50, Math.min(50, p.vx * 0.1 * temp));
+        p.y += Math.max(-50, Math.min(50, p.vy * 0.1 * temp));
+        p.vx *= 0.6;
+        p.vy *= 0.6;
       });
     }
 
     const finalPos = new Map<string, { x: number; y: number }>();
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
     positions.forEach((pos, id) => {
-      finalPos.set(id, { x: Math.round(pos.x), y: Math.round(pos.y) });
+      const rx = Math.round(pos.x);
+      const ry = Math.round(pos.y);
+      finalPos.set(id, { x: rx, y: ry });
+      minX = Math.min(minX, rx - NODE_WIDTH / 2);
+      maxX = Math.max(maxX, rx + NODE_WIDTH / 2);
+      minY = Math.min(minY, ry - NODE_HEIGHT / 2);
+      maxY = Math.max(maxY, ry + NODE_HEIGHT / 2);
     });
 
     setNodePositions(finalPos);
-    setPan({ x: 0, y: 0 });
-    setZoomLevel(1);
+
+    // AUTOMATIC INITIAL FIT TO VIEW: ensure 100% of nodes are centered and clearly visible
+    const pad = 48;
+    const availableW = Math.max(100, width - pad * 2);
+    const availableH = Math.max(100, height - pad * 2);
+    const graphW = Math.max(1, maxX - minX);
+    const graphH = Math.max(1, maxY - minY);
+    const fitScale = Math.min(1.15, Math.max(0.45, Math.min(availableW / graphW, availableH / graphH)));
+    const graphMidX = (minX + maxX) / 2;
+    const graphMidY = (minY + maxY) / 2;
+
+    const roundedZoom = Math.round(fitScale * 100) / 100;
+    setZoomLevel(roundedZoom);
+    setPan({
+      x: Math.round(width / 2 - graphMidX * roundedZoom),
+      y: Math.round(height / 2 - graphMidY * roundedZoom),
+    });
   }, [filteredNodes, filteredEdges]);
 
   // Set of connected neighbor node IDs for the currently selected node
@@ -278,10 +320,26 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
       case "IMPORTS":
         return { stroke: "#4f46e5", strokeDash: "4 4", width: 1.8, labelBg: "#e0e7ff", labelText: "#3730a3" };
       case "CONTAINS":
-        return { stroke: "#94a3b8", strokeDash: "2 3", width: 1.5, labelBg: "#f1f5f9", labelText: "#475569" };
+        return { stroke: "#64748b", strokeDash: "3 3", width: 1.6, labelBg: "#f1f5f9", labelText: "#334155" };
       default:
-        return { stroke: "#cbd5e1", strokeDash: "none", width: 1.5, labelBg: "#f8fafc", labelText: "#64748b" };
+        return { stroke: "#94a3b8", strokeDash: "none", width: 1.5, labelBg: "#f8fafc", labelText: "#475569" };
     }
+  };
+
+  // Helper to extract clean display name without directory path
+  const getCleanNodeName = (name: string) => {
+    const clean = name.replace(/\\/g, "/");
+    return clean.split("/").pop() || name;
+  };
+
+  const getCleanSublabel = (node: GraphNodeData) => {
+    if (node.file_path) {
+      const cleanPath = node.file_path.replace(/\\/g, "/");
+      const parts = cleanPath.split("/");
+      const dir = parts.length > 1 ? parts[parts.length - 2] + "/" : "";
+      return `${dir}L${node.start_line || 1}`;
+    }
+    return "global";
   };
 
   // Canvas Panning Handlers
@@ -329,7 +387,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
     setZoomLevel((z) => Math.min(2.5, Math.max(0.35, Math.round(z * factor * 100) / 100)));
   };
 
-  // Fit graph to view
+  // Fit graph to view on demand
   const handleFitToView = () => {
     if (filteredNodes.length === 0 || nodePositions.size === 0) return;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -340,19 +398,23 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
       maxY = Math.max(maxY, pos.y + NODE_HEIGHT / 2);
     });
 
-    const containerWidth = containerRef.current?.clientWidth || 900;
+    const containerWidth = containerRef.current?.clientWidth || 800;
     const containerHeight = containerRef.current?.clientHeight || 600;
-    const graphWidth = Math.max(100, maxX - minX + 120);
-    const graphHeight = Math.max(100, maxY - minY + 120);
+    const pad = 48;
+    const availableW = Math.max(100, containerWidth - pad * 2);
+    const availableH = Math.max(100, containerHeight - pad * 2);
+    const graphWidth = Math.max(1, maxX - minX);
+    const graphHeight = Math.max(1, maxY - minY);
 
-    const fitZoom = Math.min(1.5, Math.max(0.4, Math.min(containerWidth / graphWidth, containerHeight / graphHeight)));
+    const fitZoom = Math.min(1.2, Math.max(0.45, Math.min(availableW / graphWidth, availableH / graphHeight)));
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
-    setZoomLevel(Math.round(fitZoom * 100) / 100);
+    const roundedZoom = Math.round(fitZoom * 100) / 100;
+    setZoomLevel(roundedZoom);
     setPan({
-      x: containerWidth / 2 - centerX * fitZoom,
-      y: containerHeight / 2 - centerY * fitZoom,
+      x: Math.round(containerWidth / 2 - centerX * roundedZoom),
+      y: Math.round(containerHeight / 2 - centerY * roundedZoom),
     });
   };
 
@@ -587,7 +649,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
               <button
                 type="button"
                 title="Reset zoom"
-                onClick={() => { setZoomLevel(1); setPan({ x: 0, y: 0 }); }}
+                onClick={handleFitToView}
                 style={{
                   fontSize: 11,
                   fontFamily: "var(--font-mono)",
@@ -634,19 +696,45 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "var(--text-secondary)",
+                  color: "var(--blue)",
                   marginLeft: 2,
                 }}
               >
-                <Maximize2 size={12} />
+                <Maximize2 size={13} />
               </button>
             </div>
+          )}
+
+          {/* Toggle Inspector Panel button */}
+          {tab === "visual" && (
+            <button
+              type="button"
+              onClick={() => setIsInspectorOpen((prev) => !prev)}
+              title={isInspectorOpen ? "Hide Inspector Panel" : "Show Inspector Panel"}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                height: 28,
+                padding: "0 10px",
+                borderRadius: 7,
+                fontSize: 11,
+                fontWeight: 600,
+                background: isInspectorOpen ? "#eff6ff" : "#f8fafc",
+                color: isInspectorOpen ? "var(--blue)" : "var(--text-secondary)",
+                border: isInspectorOpen ? "1px solid #bfdbfe" : "1px solid var(--border)",
+                cursor: "pointer",
+              }}
+            >
+              <Info size={13} />
+              <span>Details</span>
+            </button>
           )}
         </div>
       </div>
 
       {/* Main View Area */}
-      <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden", position: "relative" }}>
         {error ? (
           <div role="alert" style={{ padding: 24, color: "var(--text-secondary)" }}>{error}</div>
         ) : loading ? (
@@ -694,7 +782,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                 <defs>
                   {/* Subtle dot grid pattern */}
                   <pattern id="grid-dots" width="24" height="24" patternUnits="userSpaceOnUse">
-                    <circle cx="12" cy="12" r="1.2" fill="#cbd5e1" />
+                    <circle cx="12" cy="12" r="1.1" fill="#cbd5e1" />
                   </pattern>
 
                   {/* Arrow markers per relationship */}
@@ -708,7 +796,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                     <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#9333ea" />
                   </marker>
                   <marker id="arrow-CONTAINS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#94a3b8" />
+                    <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#64748b" />
                   </marker>
                 </defs>
 
@@ -749,7 +837,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                           d={`M ${p1.x} ${p1.y} Q ${ctrlX} ${ctrlY} ${p2.x} ${p2.y}`}
                           fill="none"
                           stroke={style.stroke}
-                          strokeWidth={isConnectedToSelected ? style.width + 1 : style.width}
+                          strokeWidth={isConnectedToSelected ? style.width + 1.2 : style.width}
                           strokeDasharray={style.strokeDash}
                           markerEnd={`url(#${markerId})`}
                         />
@@ -794,12 +882,15 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                       (node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         node.qualified_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-                    const opacity = hasSelection ? (isSelected || isConnected ? 1 : 0.3) : 1;
+                    const opacity = hasSelection ? (isSelected || isConnected ? 1 : 0.25) : 1;
                     const color = getNodeColor(node.type);
+                    const displayName = getCleanNodeName(node.name);
+                    const sublabel = getCleanSublabel(node);
 
                     const handleNodeMouseDown = (e: React.MouseEvent) => {
                       e.stopPropagation();
                       setSelectedNode(node);
+                      setIsInspectorOpen(true);
                       setDraggingNodeId(node.id);
                       const svg = svgRef.current;
                       if (!svg) return;
@@ -833,7 +924,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                         onMouseDown={handleNodeMouseDown}
                         onDoubleClick={handleDoubleClick}
                       >
-                        {/* Outer Selection Glow / Highlight */}
+                        {/* Outer Selection Glow / Ring */}
                         {isSelected && (
                           <rect
                             x={-NODE_WIDTH / 2 - 5}
@@ -843,9 +934,9 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                             rx={14}
                             fill="none"
                             stroke="var(--blue)"
-                            strokeWidth={2}
+                            strokeWidth={2.2}
                             strokeDasharray="4 2"
-                            opacity={0.8}
+                            opacity={0.85}
                           />
                         )}
                         {isSearchMatch && !isSelected && (
@@ -885,11 +976,11 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                         />
 
                         {/* Node Type Badge */}
-                        <g transform={`translate(${-NODE_WIDTH / 2 + 12}, ${-NODE_HEIGHT / 2 + 8})`}>
+                        <g transform={`translate(${-NODE_WIDTH / 2 + 10}, ${-NODE_HEIGHT / 2 + 7})`}>
                           <rect
                             x={0}
                             y={0}
-                            width={38}
+                            width={36}
                             height={14}
                             rx={3}
                             fill={color.tagBg}
@@ -897,7 +988,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                             strokeWidth={0.5}
                           />
                           <text
-                            x={19}
+                            x={18}
                             y={10}
                             textAnchor="middle"
                             fontSize={8}
@@ -909,27 +1000,27 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                           </text>
                         </g>
 
-                        {/* Node Name */}
+                        {/* Node Primary Name */}
                         <text
-                          x={-NODE_WIDTH / 2 + 56}
-                          y={-NODE_HEIGHT / 2 + 19}
+                          x={-NODE_WIDTH / 2 + 52}
+                          y={-NODE_HEIGHT / 2 + 18}
                           fontSize={11}
                           fontWeight={600}
                           fontFamily="var(--font-mono)"
                           fill={color.text}
                         >
-                          {node.name.length > 13 ? `${node.name.slice(0, 12)}...` : node.name}
+                          {displayName.length > 13 ? `${displayName.slice(0, 12)}...` : displayName}
                         </text>
 
-                        {/* Secondary text: File Coordinates */}
+                        {/* Node Subtitle / Coordinates */}
                         <text
-                          x={-NODE_WIDTH / 2 + 12}
-                          y={-NODE_HEIGHT / 2 + 34}
+                          x={-NODE_WIDTH / 2 + 10}
+                          y={-NODE_HEIGHT / 2 + 33}
                           fontSize={9}
                           fontFamily="var(--font-mono)"
                           fill="#64748b"
                         >
-                          {node.file_path ? `${node.file_path.split("/").pop()}:L${node.start_line || 1}` : "global"}
+                          {sublabel}
                         </text>
                       </g>
                     );
@@ -937,257 +1028,292 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                 </g>
               </svg>
 
-              {/* Canvas Bottom Legend & Quick Hints */}
+              {/* Compact Floating Legend (Bottom Left) */}
               <div
                 style={{
                   position: "absolute",
                   bottom: 12,
                   left: 12,
-                  right: 12,
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "space-between",
+                  gap: 12,
                   background: "rgba(255, 255, 255, 0.94)",
                   backdropFilter: "blur(6px)",
                   border: "1px solid var(--border)",
                   borderRadius: 8,
-                  padding: "6px 14px",
+                  padding: "5px 12px",
                   fontSize: 11,
                   boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
                   pointerEvents: "auto",
                 }}
               >
-                {/* Node type indicators */}
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>Nodes:</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a" }} />
-                    <span style={{ color: "var(--text-primary)" }}>File</span>
+                    <span style={{ color: "var(--text-primary)", fontSize: 10, fontWeight: 500 }}>File</span>
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#9333ea" }} />
-                    <span style={{ color: "var(--text-primary)" }}>Class</span>
+                    <span style={{ color: "var(--text-primary)", fontSize: 10, fontWeight: 500 }}>Class</span>
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#2563eb" }} />
-                    <span style={{ color: "var(--text-primary)" }}>Function</span>
+                    <span style={{ color: "var(--text-primary)", fontSize: 10, fontWeight: 500 }}>Function</span>
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d97706" }} />
-                    <span style={{ color: "var(--text-primary)" }}>Method</span>
+                    <span style={{ color: "var(--text-primary)", fontSize: 10, fontWeight: 500 }}>Method</span>
                   </span>
                 </div>
+              </div>
 
-                {/* Mouse hints */}
-                <div style={{ color: "var(--text-muted)", fontSize: 10 }}>
-                  Drag nodes to rearrange • Drag canvas to pan • Scroll to zoom • Double-click node to inspect code
-                </div>
+              {/* Quick Mouse Hint Pill (Bottom Right) */}
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 12,
+                  right: isInspectorOpen ? 300 : 12,
+                  transition: "right 200ms ease",
+                  background: "rgba(255, 255, 255, 0.92)",
+                  backdropFilter: "blur(6px)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "4px 10px",
+                  fontSize: 10,
+                  color: "var(--text-muted)",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
+                  pointerEvents: "none",
+                }}
+              >
+                Drag nodes • Drag canvas to pan • Scroll to zoom • Double-click node to inspect
               </div>
             </div>
 
-            {/* Right Side: Selected Node Inspector Panel */}
-            <div
-              className="graph-inspector"
-              style={{
-                width: 310,
-                borderLeft: "1px solid var(--border)",
-                background: "var(--surface)",
-                padding: 16,
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                flexShrink: 0,
-                overflowY: "auto",
-              }}
-            >
-              {selectedNode ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <div>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontFamily: "var(--font-mono)",
-                        textTransform: "uppercase",
-                        color: "var(--text-muted)",
-                        letterSpacing: "0.05em",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Selected Node Details
-                    </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, minWidth: 0 }}>
-                      <h3
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: "var(--text-primary)",
-                          margin: 0,
-                          minWidth: 0,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {selectedNode.name}
-                      </h3>
-                      {(() => {
-                        const color = getNodeColor(selectedNode.type);
-                        return (
-                          <span
-                            style={{
-                              fontSize: 9,
-                              fontWeight: 700,
-                              fontFamily: "var(--font-mono)",
-                              textTransform: "uppercase",
-                              padding: "2px 6px",
-                              borderRadius: 4,
-                              background: color.tagBg,
-                              color: color.tagText,
-                              border: `1px solid ${color.border}`,
-                              flexShrink: 0,
-                            }}
-                          >
-                            {selectedNode.type}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 9,
-                      background: "#f8fafc",
-                      border: "1px solid var(--border)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 12,
-                    }}
-                  >
-                    <div>
-                      <span style={{ color: "var(--text-muted)", fontSize: 10, display: "block" }}>
-                        Qualified Name
-                      </span>
-                      <span style={{ color: "var(--blue)", fontSize: 11, wordBreak: "break-all", fontWeight: 500 }}>
-                        {selectedNode.qualified_name}
-                      </span>
-                    </div>
-
-                    {selectedNode.file_path && (
+            {/* Right Side: Collapsible Selected Node Inspector Panel */}
+            {isInspectorOpen && (
+              <div
+                className="graph-inspector"
+                style={{
+                  width: 290,
+                  borderLeft: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  padding: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  flexShrink: 0,
+                  overflowY: "auto",
+                  transition: "all 200ms ease",
+                }}
+              >
+                {selectedNode ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
                       <div>
-                        <span style={{ color: "var(--text-muted)", fontSize: 10, display: "block" }}>
-                          File Coordinates
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontFamily: "var(--font-mono)",
+                            textTransform: "uppercase",
+                            color: "var(--text-muted)",
+                            letterSpacing: "0.05em",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Selected Node
                         </span>
-                        <span style={{ color: "var(--text-primary)", fontSize: 11, overflowWrap: "anywhere" }}>
-                          {selectedNode.file_path}:L{selectedNode.start_line}-{selectedNode.end_line}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Connected Relationships */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>
-                      Connected Relationships ({graphData?.edges.filter((e) => e.source === selectedNode.id || e.target === selectedNode.id).length || 0}):
-                    </span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" }}>
-                      {graphData?.edges
-                        .filter((e) => e.source === selectedNode.id || e.target === selectedNode.id)
-                        .map((edge, idx) => {
-                          const isSource = edge.source === selectedNode.id;
-                          const connectedNode = graphData?.nodes.find((node) => node.id === (isSource ? edge.target : edge.source));
-                          const edgeStyle = getEdgeStyle(edge.type);
-                          return (
-                            <button
-                              type="button"
-                              key={edge.id || idx}
-                              disabled={!connectedNode}
-                              onClick={() => connectedNode && setSelectedNode(connectedNode)}
-                              title={connectedNode?.qualified_name}
-                              style={{
-                                padding: "6px 8px",
-                                borderRadius: 7,
-                                background: "#f8fafc",
-                                border: "1px solid var(--border)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                fontSize: 11,
-                                gap: 8,
-                                textAlign: "left",
-                                cursor: connectedNode ? "pointer" : "default",
-                              }}
-                            >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                          <h3
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: 14,
+                              fontWeight: 700,
+                              color: "var(--text-primary)",
+                              margin: 0,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              maxWidth: 180,
+                            }}
+                            title={selectedNode.name}
+                          >
+                            {getCleanNodeName(selectedNode.name)}
+                          </h3>
+                          {(() => {
+                            const color = getNodeColor(selectedNode.type);
+                            return (
                               <span
                                 style={{
                                   fontSize: 9,
-                                  padding: "2px 5px",
-                                  borderRadius: 4,
+                                  fontWeight: 700,
                                   fontFamily: "var(--font-mono)",
                                   textTransform: "uppercase",
-                                  fontWeight: 700,
-                                  background: edgeStyle.labelBg,
-                                  color: edgeStyle.labelText,
-                                  border: `1px solid ${edgeStyle.stroke}`,
+                                  padding: "2px 5px",
+                                  borderRadius: 4,
+                                  background: color.tagBg,
+                                  color: color.tagText,
+                                  border: `1px solid ${color.border}`,
+                                  flexShrink: 0,
                                 }}
                               >
-                                {edge.type}
+                                {selectedNode.type}
                               </span>
-                              <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-secondary)", fontSize: 10, overflowWrap: "anywhere" }}>
-                                {isSource ? "-> " : "<- "}{connectedNode?.name || "Unavailable node"}
-                              </span>
-                            </button>
-                          );
-                        })}
-                    </div>
-                  </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
 
-                  {/* Action to Jump to Source Code */}
-                  {selectedNode.file_path && selectedNode.start_line && (
-                    <button
-                      onClick={() =>
-                        onInspectNode({
-                          file_path: selectedNode.file_path!,
-                          start_line: selectedNode.start_line!,
-                          end_line: selectedNode.end_line || selectedNode.start_line!,
-                          symbol_name: selectedNode.name,
-                        })
-                      }
+                      <button
+                        type="button"
+                        onClick={() => setIsInspectorOpen(false)}
+                        title="Close Inspector"
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          cursor: "pointer",
+                          color: "var(--text-muted)",
+                          padding: 4,
+                          borderRadius: 4,
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+
+                    <div
                       style={{
-                        width: "100%",
+                        padding: 10,
+                        borderRadius: 8,
+                        background: "#f8fafc",
+                        border: "1px solid var(--border)",
                         display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
+                        flexDirection: "column",
                         gap: 6,
-                        padding: "9px 14px",
-                        borderRadius: 9,
-                        background: "var(--blue)",
-                        color: "white",
-                        border: "none",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        boxShadow: "0 2px 6px rgba(20,115,230,0.25)",
-                        transition: "background 120ms",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 11,
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--blue-hover)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "var(--blue)")}
                     >
-                      <FileCode style={{ width: 14, height: 14 }} />
-                      <span>Inspect in Code Viewer</span>
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>
-                  Click any node on the graph canvas to inspect its relationships.
-                </div>
-              )}
-            </div>
+                      <div>
+                        <span style={{ color: "var(--text-muted)", fontSize: 10, display: "block" }}>
+                          Qualified Name
+                        </span>
+                        <span style={{ color: "var(--blue)", fontSize: 11, wordBreak: "break-all", fontWeight: 500 }}>
+                          {selectedNode.qualified_name}
+                        </span>
+                      </div>
+
+                      {selectedNode.file_path && (
+                        <div>
+                          <span style={{ color: "var(--text-muted)", fontSize: 10, display: "block" }}>
+                            File Coordinates
+                          </span>
+                          <span style={{ color: "var(--text-primary)", fontSize: 11, overflowWrap: "anywhere" }}>
+                            {selectedNode.file_path}:L{selectedNode.start_line}-{selectedNode.end_line}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Connected Relationships */}
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6, display: "block" }}>
+                        Connected Relationships ({graphData?.edges.filter((e) => e.source === selectedNode.id || e.target === selectedNode.id).length || 0}):
+                      </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 180, overflowY: "auto" }}>
+                        {graphData?.edges
+                          .filter((e) => e.source === selectedNode.id || e.target === selectedNode.id)
+                          .map((edge, idx) => {
+                            const isSource = edge.source === selectedNode.id;
+                            const connectedNode = graphData?.nodes.find((node) => node.id === (isSource ? edge.target : edge.source));
+                            const edgeStyle = getEdgeStyle(edge.type);
+                            return (
+                              <button
+                                type="button"
+                                key={edge.id || idx}
+                                disabled={!connectedNode}
+                                onClick={() => connectedNode && setSelectedNode(connectedNode)}
+                                title={connectedNode?.qualified_name}
+                                style={{
+                                  padding: "5px 7px",
+                                  borderRadius: 6,
+                                  background: "#f8fafc",
+                                  border: "1px solid var(--border)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  fontSize: 10,
+                                  gap: 6,
+                                  textAlign: "left",
+                                  cursor: connectedNode ? "pointer" : "default",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 8,
+                                    padding: "2px 4px",
+                                    borderRadius: 3,
+                                    fontFamily: "var(--font-mono)",
+                                    textTransform: "uppercase",
+                                    fontWeight: 700,
+                                    background: edgeStyle.labelBg,
+                                    color: edgeStyle.labelText,
+                                    border: `1px solid ${edgeStyle.stroke}`,
+                                  }}
+                                >
+                                  {edge.type}
+                                </span>
+                                <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-secondary)", fontSize: 10, overflowWrap: "anywhere" }}>
+                                  {isSource ? "-> " : "<- "}{connectedNode ? getCleanNodeName(connectedNode.name) : "Unavailable"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* Action to Jump to Source Code */}
+                    {selectedNode.file_path && selectedNode.start_line && (
+                      <button
+                        onClick={() =>
+                          onInspectNode({
+                            file_path: selectedNode.file_path!,
+                            start_line: selectedNode.start_line!,
+                            end_line: selectedNode.end_line || selectedNode.start_line!,
+                            symbol_name: selectedNode.name,
+                          })
+                        }
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          background: "var(--blue)",
+                          color: "white",
+                          border: "none",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          boxShadow: "0 2px 6px rgba(20,115,230,0.2)",
+                          transition: "background 120ms",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--blue-hover)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--blue)")}
+                      >
+                        <FileCode style={{ width: 13, height: 13 }} />
+                        <span>Inspect in Code Viewer</span>
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 11 }}>
+                    Click any node on the canvas to inspect its details.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : tab === "cards" ? (
           /* ======================================================== */
@@ -1221,7 +1347,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                   filteredNodes.map((node) => {
                     const isSelected = selectedNode?.id === node.id;
                     const color = getNodeColor(node.type);
-                    const fileName = node.file_path ? node.file_path.split("/").pop() : "";
+                    const displayName = getCleanNodeName(node.name);
 
                     return (
                       <div
@@ -1258,14 +1384,12 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                           >
                             {node.type}
                           </span>
-                          {fileName && (
-                            <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
-                              {fileName}
-                            </span>
-                          )}
+                          <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+                            {getCleanSublabel(node)}
+                          </span>
                         </div>
                         <h4 style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--text-primary)", margin: "2px 0 0 0" }}>
-                          {node.name}
+                          {displayName}
                         </h4>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
                           <span>{node.start_line ? `L${node.start_line}-${node.end_line}` : "Global"}</span>
@@ -1282,10 +1406,10 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
             <div
               className="graph-inspector"
               style={{
-                width: 310,
+                width: 290,
                 borderLeft: "1px solid var(--border)",
                 background: "var(--surface)",
-                padding: 16,
+                padding: 14,
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -1294,16 +1418,16 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
               }}
             >
               {selectedNode ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div>
                     <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600 }}>
                       Selected Node Details
                     </span>
-                    <h3 style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: "var(--text-primary)", margin: "4px 0 0 0" }}>
-                      {selectedNode.name}
+                    <h3 style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: "4px 0 0 0" }}>
+                      {getCleanNodeName(selectedNode.name)}
                     </h3>
                   </div>
-                  <div style={{ padding: 12, borderRadius: 9, background: "#f8fafc", border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                  <div style={{ padding: 10, borderRadius: 8, background: "#f8fafc", border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
                     <div style={{ color: "var(--text-muted)" }}>Qualified Name</div>
                     <div style={{ color: "var(--blue)", fontWeight: 500, wordBreak: "break-all" }}>{selectedNode.qualified_name}</div>
                   </div>
@@ -1323,17 +1447,17 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                         alignItems: "center",
                         justifyContent: "center",
                         gap: 6,
-                        padding: "9px 14px",
-                        borderRadius: 9,
+                        padding: "8px 12px",
+                        borderRadius: 8,
                         background: "var(--blue)",
                         color: "white",
                         border: "none",
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: 600,
                         cursor: "pointer",
                       }}
                     >
-                      <FileCode size={14} /> Inspect in Code Viewer
+                      <FileCode size={13} /> Inspect in Code Viewer
                     </button>
                   )}
                 </div>
