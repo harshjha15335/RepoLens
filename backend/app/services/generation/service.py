@@ -321,11 +321,14 @@ class GenerationService:
         """
         start_time = time.time()
 
-        # Step 1: Retrieve
+        # Step 1: Retrieve (fast path if code already selected)
         retrieval_result = await self.retrieval.search(
             repository_id=repository_id,
             query=question,
             strategy="hybrid",
+            top_k=3 if code_context else None,
+            enable_graph_expansion=not bool(code_context),
+            enable_mmr=False,
         )
         retrieved_chunks = retrieval_result.get("chunks", [])
         evidence_chunks = ([code_context] if code_context else []) + retrieved_chunks
