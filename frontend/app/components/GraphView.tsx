@@ -144,7 +144,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
     });
 
     const nodeIds = filteredNodes.map((node) => node.id);
-    const TARGET_DIST = 185;
+    const TARGET_DIST = 130;
 
     // 85 iterations of Hooke's spring relaxation + box collision
     for (let iter = 0; iter < 85; iter++) {
@@ -169,8 +169,8 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
           }
 
           // Hard rectangular box anti-overlap separation
-          const minSepX = NODE_WIDTH + 32;
-          const minSepY = NODE_HEIGHT + 24;
+          const minSepX = NODE_WIDTH + 18;
+          const minSepY = NODE_HEIGHT + 16;
           if (Math.abs(dx) < minSepX && Math.abs(dy) < minSepY) {
             const overlapX = minSepX - Math.abs(dx);
             const overlapY = minSepY - Math.abs(dy);
@@ -237,7 +237,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
     const availableH = Math.max(100, height - pad * 2);
     const graphW = Math.max(1, maxX - minX);
     const graphH = Math.max(1, maxY - minY);
-    const fitScale = Math.min(1.15, Math.max(0.45, Math.min(availableW / graphW, availableH / graphH)));
+    const fitScale = Math.min(1.15, Math.max(0.65, Math.min(availableW / graphW, availableH / graphH)));
     const graphMidX = (minX + maxX) / 2;
     const graphMidY = (minY + maxY) / 2;
 
@@ -814,7 +814,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                     const isConnectedToSelected =
                       selectedNode && (edge.source === selectedNode.id || edge.target === selectedNode.id);
                     const hasSelection = Boolean(selectedNode);
-                    const opacity = hasSelection ? (isConnectedToSelected ? 1 : 0.15) : 0.85;
+                    const opacity = hasSelection ? (isConnectedToSelected ? 1 : 0.28) : 0.85;
 
                     const style = getEdgeStyle(edge.type);
 
@@ -882,7 +882,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                       (node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         node.qualified_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-                    const opacity = hasSelection ? (isSelected || isConnected ? 1 : 0.25) : 1;
+                    const opacity = hasSelection ? (isSelected || isConnected ? 1 : 0.62) : 1;
                     const color = getNodeColor(node.type);
                     const displayName = getCleanNodeName(node.name);
                     const sublabel = getCleanSublabel(node);
