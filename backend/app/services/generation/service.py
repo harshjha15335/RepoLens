@@ -265,15 +265,29 @@ class GenerationService:
         settings = get_settings()
 
         # Initialize LLM provider
-        if settings.llm_provider.lower() == "ollama":
-            self.provider = OllamaProvider(
-                model=settings.llm_model,
-                base_url=settings.ollama_base_url,
-            )
-        elif settings.llm_provider.lower() in ("openai", "api"):
+        provider_name = settings.llm_provider.lower()
+        if provider_name == "groq":
+            base_url = settings.llm_base_url or "https://api.groq.com/openai/v1"
+            model = settings.llm_model if settings.llm_model not in ("llama3.1:8b", "qwen2.5-coder:latest") else "llama-3.3-70b-versatile"
             self.provider = OpenAICompatibleProvider(
-                model=settings.llm_model,
-                base_url=settings.llm_base_url,
+                model=model,
+                base_url=base_url,
+                api_key=settings.llm_api_key,
+            )
+        elif provider_name == "openrouter":
+            base_url = settings.llm_base_url or "https://openrouter.ai/api/v1"
+            model = settings.llm_model if settings.llm_model not in ("llama3.1:8b", "qwen2.5-coder:latest") else "meta-llama/llama-3.3-70b-instruct:free"
+            self.provider = OpenAICompatibleProvider(
+                model=model,
+                base_url=base_url,
+                api_key=settings.llm_api_key,
+            )
+        elif provider_name in ("openai", "api"):
+            base_url = settings.llm_base_url or "https://api.openai.com/v1"
+            model = settings.llm_model if settings.llm_model not in ("llama3.1:8b", "qwen2.5-coder:latest") else "gpt-4o-mini"
+            self.provider = OpenAICompatibleProvider(
+                model=model,
+                base_url=base_url,
                 api_key=settings.llm_api_key,
             )
         else:
