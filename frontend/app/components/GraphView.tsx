@@ -470,7 +470,7 @@ export default function GraphView({ repositoryId, onInspectNode, onBackToCode }:
                             {node.start_line ? `L${node.start_line}-${node.end_line}` : "Global"}
                           </span>
                           <span style={{ color: isSelected ? "var(--blue)" : "var(--text-muted)", fontSize: 11, fontWeight: 500 }}>
-                            {isSelected ? "Selected ✓" : "Inspect →"}
+                            {isSelected ? "Selected" : "Inspect"}
                           </span>
                         </div>
                       </div>

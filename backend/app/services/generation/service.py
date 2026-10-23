@@ -381,6 +381,14 @@ class GenerationService:
             logger.warning(f"LLM provider error ({e}), using grounded offline synthesis fallback.")
             answer = self._offline_grounded_synthesis(question, tutor_mode, evidence_chunks)
 
+        # Strip all emojis and pictographs from the answer
+        answer = re.sub(
+            r'[𐀀-􏿿]|[☀-➿]|[⌀-⏿]|[⭐-⭕]|[︎️]',
+            '',
+            answer,
+        )
+        answer = re.sub(r'[ 	]+', ' ', answer)
+
         gen_latency_ms = (time.time() - gen_start) * 1000
 
         # Step 5: Extract and validate citations

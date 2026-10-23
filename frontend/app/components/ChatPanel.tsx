@@ -121,7 +121,15 @@ export default function ChatPanel({
     }
   };
 
-  const renderMessageContent = (content: string, messageId: string) => {
+const stripEmojis = (str: string) => {
+  if (!str) return '';
+  return str
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}-\u{2B55}\u{FE0E}\u{FE0F}]/gu, '')
+    .replace(/[ \t]+/g, ' ');
+};
+
+  const renderMessageContent = (rawContent: string, messageId: string) => {
+    const content = stripEmojis(rawContent);
     const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
     type MessagePart = { type: "text"; content: string } | { type: "code"; language: string; code: string };
     const parts: MessagePart[] = [];
@@ -356,7 +364,7 @@ export default function ChatPanel({
                     {/* Body */}
                     {isUser ? (
                       <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                        {msg.content}
+                        {stripEmojis(msg.content)}
                       </p>
                     ) : (
                       renderMessageContent(msg.content, msg.id)
