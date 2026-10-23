@@ -489,12 +489,12 @@ class RetrievalService:
 
         # Map chunk to its embedding for fast lookup
         chunk_embeddings = {
-            chunks[i]["chunk_id"]: np.array(embeddings[i])
+            id(chunks[i]): np.array(embeddings[i])
             for i in range(len(chunks))
         }
 
         selected = [chunks[0]]
-        selected_embeddings = [chunk_embeddings[chunks[0]["chunk_id"]]]
+        selected_embeddings = [chunk_embeddings[id(chunks[0])]]
         remaining = list(chunks[1:])
 
         while len(selected) < top_k and remaining:
@@ -506,7 +506,7 @@ class RetrievalService:
                 relevance = candidate.get("score", 0)
 
                 # Diversity: max cosine similarity with already selected
-                cand_emb = chunk_embeddings[candidate["chunk_id"]]
+                cand_emb = chunk_embeddings[id(candidate)]
                 max_sim = 0
                 for sel_emb in selected_embeddings:
                     # Cosine similarity: (a . b) / (||a|| * ||b||)
@@ -524,7 +524,7 @@ class RetrievalService:
 
             best_chunk = remaining.pop(best_idx)
             selected.append(best_chunk)
-            selected_embeddings.append(chunk_embeddings[best_chunk["chunk_id"]])
+            selected_embeddings.append(chunk_embeddings[id(best_chunk)])
 
         return selected
 

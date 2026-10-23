@@ -15,8 +15,6 @@ import {
   Compass,
   X,
   Info,
-  ChevronRight,
-  ChevronLeft,
 } from "lucide-react";
 import { GraphResponse, GraphNodeData, CallFlowItem, Citation } from "../types";
 import { api } from "../lib/api";
